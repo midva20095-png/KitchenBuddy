@@ -187,9 +187,54 @@ function sectionIds() {
   return Object.keys(NODES);
 }
 
+function sectionGuess(text) {
+  const words = normalize(text).split(/[^a-zа-я0-9]+/).filter(word => word.length >= 4);
+  if (!words.length) return '';
+  let best = '';
+  let score = 0;
+  for (const node of Object.values(NODES)) {
+    const title = normalize(`${node.title} ${node.short}`);
+    let next = 0;
+    for (const word of words) {
+      if (title.includes(word) || title.includes(word.slice(0, 5))) next += word.length + (node.children ? 0 : 3);
+    }
+    if (next > score) {
+      score = next;
+      best = node.id;
+    }
+  }
+  return score >= 4 ? best : '';
+}
+
+function familyIds(id) {
+  const node = sectionById(id);
+  if (!node) return [];
+  const ids = new Set([id]);
+  let cursor = node;
+  const seen = new Set();
+  while (cursor && !seen.has(cursor.id)) {
+    seen.add(cursor.id);
+    ids.add(cursor.id);
+    cursor = cursor.parent ? sectionById(cursor.parent) : null;
+  }
+  for (const other of Object.values(NODES)) {
+    if (node.parent && sectionById(node.parent) && other.parent === node.parent) ids.add(other.id);
+    let walk = other;
+    const guard = new Set();
+    while (walk && !guard.has(walk.id)) {
+      if (walk.id === id) ids.add(other.id);
+      guard.add(walk.id);
+      walk = walk.parent ? sectionById(walk.parent) : null;
+    }
+  }
+  return [...ids];
+}
+
 module.exports = {
   sectionById,
   sectionAlias,
+  sectionGuess,
+  familyIds,
   sectionKeyboard,
   sectionText,
   sectionIds

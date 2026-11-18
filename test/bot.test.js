@@ -246,23 +246,29 @@ test('рецепт из базы находится только в своём �
 
   await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 2 });
   assert.equal(calls, 1);
-  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'keep' }, place: 'dm', messageId: 3 });
-  assert.match(sent.at(-1), /вашу базу/);
-  const stored = await store.findCatalog('20', { category: 'soup', dish: 'борщ' });
+  const stored = await store.findCatalog('21', { category: 'soup', dish: 'борщ' });
   assert.equal(stored.title, 'Борщ');
-  assert.equal((await store.findCatalog('20', { category: 'cake', dish: 'борщ' })), null);
+  assert.equal((await store.findCatalog('21', { category: 'cake', dish: 'борщ' })), null);
 
-  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 4 });
-  await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 5 });
+  await bot.handle({ userId: '21', peerId: 21, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 3 });
+  await bot.handle({ userId: '21', peerId: 21, text: 'борщ на 4', place: 'dm', messageId: 4 });
   assert.equal(calls, 1);
-  assert.match(sent.at(-1), /Нашла в вашей базе/);
+  assert.match(sent.at(-1), /Нашла в базе/);
+
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'keep' }, place: 'dm', messageId: 5 });
+  assert.match(sent.at(-1), /общую базу/);
+
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 6 });
+  await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 7 });
+  assert.equal(calls, 1);
+  assert.match(sent.at(-1), /Нашла в базе/);
   assert.equal((await store.getUser('20')).usageCount, 1);
 
-  await bot.handle({ userId: '20', peerId: 20, text: 'моя база', place: 'dm', messageId: 6 });
+  await bot.handle({ userId: '20', peerId: 20, text: 'моя база', place: 'dm', messageId: 8 });
   assert.match(sent.at(-1), /Борщ/);
 
-  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'cake' }, place: 'dm', messageId: 7 });
-  await bot.handle({ userId: '20', peerId: 20, text: 'медовик на 8', place: 'dm', messageId: 8 });
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'cake' }, place: 'dm', messageId: 9 });
+  await bot.handle({ userId: '20', peerId: 20, text: 'медовик на 8', place: 'dm', messageId: 10 });
   assert.equal(calls, 2);
-  assert.doesNotMatch(sent.at(-1), /Нашла в вашей базе/);
+  assert.doesNotMatch(sent.at(-1), /Нашла в базе/);
 });

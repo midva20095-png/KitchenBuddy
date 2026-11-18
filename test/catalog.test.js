@@ -11,6 +11,7 @@ const loose = { category: '', title: 'Сырники', query: 'сырники', 
 
 test('полка не отдаёт чужой рецепт', () => {
   assert.equal(sameShelf('soup', 'cake'), false);
+  assert.equal(sameShelf('soup', 'borsch'), true);
   assert.equal(sameShelf('soup', 'first'), true);
   assert.equal(sameShelf('first', 'soup'), true);
   assert.equal(sameShelf('', 'soup'), false);

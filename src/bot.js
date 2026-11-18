@@ -7,6 +7,8 @@ const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
 const { wallWorthy } = require('./incoming');
 const { withPromo } = require('./promo');
+const { formatRecipe } = require('./recipe');
+const { sectionGuess } = require('./menu');
 
 const FAIL = 'В базе сейчас нет ответа. Напишите ещё раз через минуту.';
 
@@ -172,6 +174,25 @@ function createBot(options) {
     return out;
   }
 
+  async function rememberRecipe(userId, job, recipe) {
+    if (!store.saveCatalog || !recipe || !recipe.title) return;
+    const data = (job && job.data) || {};
+    let category = job && job.kind === 'section' ? String(data.section || '') : '';
+    if (!category) category = sectionGuess(data.dish || recipe.title || '');
+    try {
+      await store.saveCatalog(userId, {
+        category,
+        title: recipe.title,
+        query: data.dish || recipe.title,
+        recipe,
+        body: formatRecipe(recipe),
+        source: 'found'
+      });
+    } catch (error) {
+      console.error('Рецепт в общую базу не сохранился.');
+    }
+  }
+
   async function findSaved(userId, job) {
     if (!store.findCatalog || !job || !['section', 'dish'].includes(job.kind)) return null;
     const data = job.data || {};
@@ -332,6 +353,7 @@ function createBot(options) {
     }
     const done = complete(result.user, result.job, raw, ctx);
     const title = done.user.lastRecipe && done.user.lastRecipe.title;
+    if (done.recipe) await rememberRecipe(userId, result.job, done.user.lastRecipe);
     await journal(userId, done.recipe ? 'recipe' : 'reply', done.recipe ? title : result.job.memory);
     await keep(done.user);
     const rest = await deliver(fresh.peerId, done.messages);

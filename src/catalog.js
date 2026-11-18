@@ -1,7 +1,7 @@
 'use strict';
 
 const { normalize } = require('./text');
-const { sectionById } = require('./menu');
+const { sectionById, familyIds } = require('./menu');
 
 const STOP = ['рецепт', 'блюдо', 'домаш', 'пригот', 'порци', 'пожалу', 'быстр', 'ужин', 'обед', 'вкусн', 'напиш'];
 
@@ -31,7 +31,8 @@ function sameShelf(saved, context) {
   if (!context) return true;
   if (!saved) return false;
   if (saved === context) return true;
-  return climb(saved, context) || climb(context, saved);
+  if (climb(saved, context) || climb(context, saved)) return true;
+  return familyIds(context).includes(saved);
 }
 
 function matchCatalog(rows, query) {
@@ -57,15 +58,15 @@ function matchCatalog(rows, query) {
 function formatCatalog(rows) {
   const list = rows || [];
   if (!list.length) {
-    return 'В вашей базе пока пусто. Откройте рецепт и нажмите «В базу» или пришлите свой через «Мой рецепт» из нужного раздела.';
+    return 'В базе пока пусто. Готовый рецепт попадает сюда сам. Свой текст присылают через «Мой рецепт» из нужного раздела.';
   }
-  const lines = ['Ваша база.'];
+  const lines = ['База рецептов.'];
   list.slice(0, 15).forEach((row, index) => {
     const node = sectionById(row.category);
     const where = node ? ` · ${node.short || node.title}` : '';
     lines.push(`${index + 1}. ${row.title || 'Рецепт'}${where}`);
   });
-  lines.push('', 'В разделе бот ищет только рецепты этой полки и соседних подразделов.');
+  lines.push('', 'База общая. В разделе бот ищет только рецепты этой полки и соседних подразделов.');
   return lines.join('\n');
 }
 

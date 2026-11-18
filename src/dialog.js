@@ -133,12 +133,12 @@ function helpText(communityName) {
     'Завтрак — завтраки и напитки.',
     'Сладкое — выпечка, десерты, торты и пирожные. У кондитера есть свои безаллергенные и диетические подразделы.',
     'Подбор — «Из того, что есть» готовит из продуктов дома. «Быстрый ужин» укладывается в несколько минут. «Случайное блюдо» предлагает идею. «Без аллергенов» и «Диетическое» — обычная домашняя еда, не назначение врача.',
-    'Мои рецепты — избранное, ваша база и собственный текст.',
+    'Мои рецепты — избранное, общая база и собственный текст.',
     'Кнопка раздела ничего не ищет сама. Сначала откройте полку, например «Супы», и напишите блюдо: «борщ на 4».',
     '',
     'Кнопки у рецепта',
     'В избранное — короткая закладка. Потом откройте «Избранное» или напишите «открой 1». «удали 2» убирает второй.',
-    'В базу — сохранить этот рецепт на полку, в которой вы его искали. В чужой раздел он не попадёт. «Моя база» показывает, что уже лежит.',
+    'Готовый рецепт сам попадает в общую базу. Её видят все, но в чужом разделе рецепт не находится. «Моя база» показывает, что уже лежит.',
     'Список покупок — продукты, которые нужно купить для этого блюда. Это не оплата и не заказ.',
     'Готовить по шагам — один шаг за раз. «Дальше» показывает следующий.',
     'Другой рецепт — похожее блюдо, не копия текущего.',
@@ -542,7 +542,7 @@ function beginOwn(user) {
   user.draft = { section };
   return {
     user,
-    messages: [say('Напишите свой рецепт одним сообщением: название, продукты и как готовить. Он сохранится в вашу базу.', backKeyboard())],
+    messages: [say('Напишите свой рецепт одним сообщением: название, продукты и как готовить. Он попадёт в общую базу.', backKeyboard())],
     job: null
   };
 }
@@ -565,7 +565,7 @@ function fromOwn(user, text) {
   const where = node ? ` Раздел: «${node.title}». В других разделах он не всплывёт.` : ' Раздел не выбран, поэтому по полкам он не ищется — только по точному названию.';
   return {
     user,
-    messages: [say(`Сохранила «${title}» в вашу базу.${where}\n\nЕго можно переслать из этой переписки или нажать «На стену».`, shareKeyboard())],
+    messages: [say(`Сохранила «${title}» в общую базу.${where}\n\nЕго можно переслать из этой переписки или нажать «На стену».`, shareKeyboard())],
     job: null,
     share: { title, body, source: 'own' },
     catalog: { category, title, query: title, recipe: null, body, source: 'own' }
@@ -580,7 +580,7 @@ function keepInBase(user) {
   const where = node ? ` в раздел «${node.title}»` : '';
   return {
     user,
-    messages: [say(`Сохранила «${title}» в вашу базу${where}. В другом разделе этот рецепт не покажется.`, recipeKeyboard(user.lastRecipe))],
+    messages: [say(`Сохранила «${title}» в общую базу${where}. В другом разделе этот рецепт не покажется.`, recipeKeyboard(user.lastRecipe))],
     job: null,
     catalog: {
       category,
@@ -784,7 +784,7 @@ function fromCatalog(user, job, found, ctx) {
   const nextJob = job || { kind: 'dish', memory: found && found.title, prompt: '' };
   if (found && found.recipe) {
     const done = complete(user, nextJob, JSON.stringify(found.recipe), Object.assign({}, ctx, { saved: true }));
-    if (done.messages[0]) done.messages[0].text = `Нашла в вашей базе.\n\n${done.messages[0].text}`;
+    if (done.messages[0]) done.messages[0].text = `Нашла в базе.\n\n${done.messages[0].text}`;
     if (found.category) done.user.lastCategory = found.category;
     done.recipe = true;
     return done;
@@ -796,7 +796,7 @@ function fromCatalog(user, job, found, ctx) {
   const body = String((found && found.body) || '').trim() || 'Рецепт в базе пустой. Напишите название ещё раз.';
   return {
     user: next,
-    messages: [{ text: shown(`Нашла в вашей базе.\n\n${body}`, ctx, nextJob.memory), keyboard: menuKeyboard() }],
+    messages: [{ text: shown(`Нашла в базе.\n\n${body}`, ctx, nextJob.memory), keyboard: menuKeyboard() }],
     commentText: '',
     recipe: true
   };

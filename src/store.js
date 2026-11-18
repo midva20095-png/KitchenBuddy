@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const { normalize } = require('./text');
 const { matchCatalog } = require('./catalog');
+const { familyIds } = require('./menu');
 
 function createStore(dir) {
   const file = path.join(dir, 'kitchen.json');
@@ -157,34 +158,33 @@ function createStore(dir) {
           source: item.source === 'own' ? 'own' : 'found',
           createdAt: new Date().toISOString()
         };
-        const same = data.catalog.find(entry => entry.userId === id && entry.category === category && normalize(entry.title) === normalize(title));
+        const same = data.catalog.find(entry => entry.category === category && normalize(entry.title) === normalize(title));
         if (same) {
           Object.assign(same, row);
         } else {
           data.catalog.push(row);
         }
-        const mine = data.catalog.filter(entry => entry.userId === id);
-        if (mine.length > 100) {
-          const drop = new Set(mine.slice(0, mine.length - 100));
-          data.catalog = data.catalog.filter(entry => !drop.has(entry));
-        }
+        if (data.catalog.length > 2000) data.catalog.splice(0, data.catalog.length - 2000);
         await persist();
         return { title: row.title };
       });
     },
     findCatalog(userId, query) {
-      const id = String(userId || '').replace(/\D/g, '');
       return enqueue(async () => {
         const data = await load();
-        const rows = data.catalog.filter(entry => entry.userId === id).slice().reverse();
+        const category = String((query && query.category) || '');
+        const family = new Set(familyIds(category));
+        const rows = data.catalog
+          .filter(entry => !category || family.has(entry.category))
+          .slice(-500)
+          .reverse();
         return matchCatalog(rows, query);
       });
     },
-    listCatalog(userId) {
-      const id = String(userId || '').replace(/\D/g, '');
+    listCatalog() {
       return enqueue(async () => {
         const data = await load();
-        return data.catalog.filter(entry => entry.userId === id).slice(-30).reverse().map(entry => ({
+        return data.catalog.slice(-30).reverse().map(entry => ({
           category: entry.category,
           title: entry.title,
           query: entry.query,

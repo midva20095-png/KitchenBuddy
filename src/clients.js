@@ -2,6 +2,7 @@
 
 const { Pool } = require('pg');
 const { matchCatalog } = require('./catalog');
+const { familyIds } = require('./menu');
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS clients (
@@ -228,9 +229,9 @@ function createClients(connectionString, options) {
     const recipe = item.recipe && typeof item.recipe === 'object' ? JSON.stringify(item.recipe) : null;
     const existing = await query(
       `SELECT id FROM catalog_recipes
-       WHERE user_id = $1 AND category = $2 AND lower(title) = lower($3)
+       WHERE category = $1 AND lower(title) = lower($2)
        ORDER BY id DESC LIMIT 1`,
-      [id, category, title]
+      [category, title]
     );
     if (existing.rows[0]) {
       await query(
@@ -245,33 +246,29 @@ function createClients(connectionString, options) {
        RETURNING id`,
       [id, category, title, queryText, recipe, body, source]
     );
-    await query(
-      `DELETE FROM catalog_recipes WHERE id IN (
-         SELECT id FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC OFFSET 100
-       )`,
-      [id]
-    );
     return { id: inserted.rows[0] ? String(inserted.rows[0].id) : '' };
   }
 
   async function findCatalog(userId, lookup) {
-    const id = cleanId(userId);
-    if (!id) return null;
-    const result = await query(
-      `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
-       FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC LIMIT 200`,
-      [id]
-    );
+    const category = String((lookup && lookup.category) || '');
+    const family = familyIds(category);
+    const result = family.length
+      ? await query(
+        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+         FROM catalog_recipes WHERE category = ANY($1::text[]) ORDER BY id DESC LIMIT 500`,
+        [family]
+      )
+      : await query(
+        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+         FROM catalog_recipes ORDER BY id DESC LIMIT 500`
+      );
     return matchCatalog(result.rows.map(catalogRow), lookup);
   }
 
-  async function listCatalog(userId) {
-    const id = cleanId(userId);
-    if (!id) return [];
+  async function listCatalog() {
     const result = await query(
       `SELECT id::text AS id, category, title, query, source
-       FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC LIMIT 30`,
-      [id]
+       FROM catalog_recipes ORDER BY id DESC LIMIT 30`
     );
     return result.rows.map(row => ({
       category: row.category || '',
