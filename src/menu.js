@@ -150,36 +150,37 @@ function childButton(entry) {
   const node = NODES[ref.id];
   if (!node) return textButton('Меню', { a: 'menu' }, 'secondary');
   const label = ref.label || node.short || node.title;
-  if (node.children) return textButton(label, { a: 'section', s: node.id }, 'primary');
-  return textButton(label, { a: 'make', s: node.id }, 'primary');
+  return textButton(label, { a: 'section', s: node.id }, 'primary');
+}
+
+function backButton(node) {
+  const hubs = new Set(['meal', 'morning', 'sweetbox', 'pick', 'mine']);
+  if (!node.parent || node.parent === 'menu') return textButton('В меню', { a: 'menu' }, 'secondary');
+  const payload = hubs.has(node.parent) ? { a: 'hub', h: node.parent } : { a: 'section', s: node.parent };
+  return textButton('Назад', payload, 'secondary');
 }
 
 function sectionKeyboard(id) {
   const node = NODES[id];
-  if (!node || !node.children) return null;
+  if (!node) return null;
   const rows = [];
-  for (let i = 0; i < node.children.length; i += 2) {
-    const row = [childButton(node.children[i])];
-    if (node.children[i + 1]) row.push(childButton(node.children[i + 1]));
+  const children = node.children || [];
+  for (let i = 0; i < children.length; i += 2) {
+    const row = [childButton(children[i])];
+    if (children[i + 1]) row.push(childButton(children[i + 1]));
     rows.push(row);
   }
-  const hubs = new Set(['meal', 'morning', 'sweetbox', 'pick', 'mine']);
-  const back = !node.parent || node.parent === 'menu'
-    ? textButton('В меню', { a: 'menu' }, 'secondary')
-    : textButton('Назад', hubs.has(node.parent) ? { a: 'hub', h: node.parent } : { a: 'section', s: node.parent }, 'secondary');
-  rows.push([textButton('Придумай блюдо', { a: 'make', s: id }, 'positive'), back]);
+  rows.push([backButton(node)]);
   return board(rows);
 }
 
 function sectionText(id) {
   const node = NODES[id];
   if (!node) return 'Такого раздела нет.';
-  return [
-    `${node.title}.`,
-    node.brief,
-    '',
-    'Выберите кнопку или напишите своё блюдо в этом разделе.'
-  ].join('\n');
+  const wait = node.children
+    ? 'Выберите подраздел и напишите конкретное блюдо. Пока названия нет, поиск не начинается.'
+    : 'Напишите конкретное блюдо: название и, если нужно, порции. Пока названия нет, поиск не начинается.';
+  return [`${node.title}.`, node.brief, '', wait].join('\n');
 }
 
 function sectionIds() {

@@ -1,13 +1,14 @@
 'use strict';
 
-const { blankUser, overLimit, turn, complete, limitTurn } = require('./dialog');
-const { menuKeyboard } = require('./keyboard');
+const { blankUser, overLimit, turn, complete, fromCatalog, limitTurn } = require('./dialog');
+const { menuKeyboard, hubKeyboard } = require('./keyboard');
+const { formatCatalog } = require('./catalog');
 const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
 const { wallWorthy } = require('./incoming');
 const { withPromo } = require('./promo');
 
-const FAIL = 'Повар сейчас не ответил. Напишите ещё раз через минуту.';
+const FAIL = 'В базе сейчас нет ответа. Напишите ещё раз через минуту.';
 
 function makeCtx(config, now, lessons) {
   const screen = config.screenName;
@@ -171,6 +172,23 @@ function createBot(options) {
     return out;
   }
 
+  async function findSaved(userId, job) {
+    if (!store.findCatalog || !job || !['section', 'dish'].includes(job.kind)) return null;
+    const data = job.data || {};
+    const dish = data.dish || '';
+    if (!dish) return null;
+    try {
+      return await store.findCatalog(userId, {
+        category: job.kind === 'section' ? (data.section || '') : '',
+        dish,
+        text: job.memory
+      });
+    } catch (error) {
+      console.error('Поиск в базе не удался.');
+      return null;
+    }
+  }
+
   async function askModel(system, history, prompt) {
     return slot(() => giga.complete({ system, history, prompt }));
   }
@@ -266,6 +284,21 @@ function createBot(options) {
     }
     if (result.post) return publish(fresh.peerId, userId, result.post);
     if (result.share) await rememberShare(userId, result);
+    if (result.catalog && store.saveCatalog) {
+      try {
+        await store.saveCatalog(userId, result.catalog);
+      } catch (error) {
+        console.error('Рецепт в базу не сохранился.');
+      }
+    }
+    if (result.listCatalog) {
+      let rows = [];
+      if (store.listCatalog) {
+        try { rows = await store.listCatalog(userId); } catch (error) { rows = []; }
+      }
+      await keep(result.user);
+      return deliver(fresh.peerId, [{ text: formatCatalog(rows), keyboard: hubKeyboard('mine') || menuKeyboard() }]);
+    }
     if (!result.job) {
       await keep(result.user);
       return deliver(fresh.peerId, result.messages);
@@ -279,6 +312,14 @@ function createBot(options) {
     const prelude = await deliver(fresh.peerId, result.messages);
     if (typing) {
       try { await typing(fresh.peerId); } catch (error) {}
+    }
+    const found = await findSaved(userId, result.job);
+    if (found) {
+      const done = fromCatalog(result.user, result.job, found, ctx);
+      await journal(userId, 'found', found.title || '');
+      await keep(done.user);
+      const rest = await deliver(fresh.peerId, done.messages);
+      return prelude.concat(rest);
     }
     let raw = '';
     try {

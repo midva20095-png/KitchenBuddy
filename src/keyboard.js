@@ -59,8 +59,9 @@ function hubKeyboard(id) {
   }
   if (id === 'mine') {
     return board([
-      [textButton('Избранное', { a: 'favorites' }, 'primary'), textButton('Мой рецепт', { a: 'myrecipe' }, 'positive')],
-      [textButton('Поделиться', { a: 'share' }, 'primary'), menu]
+      [textButton('Избранное', { a: 'favorites' }, 'primary'), textButton('Моя база', { a: 'base' }, 'primary')],
+      [textButton('Мой рецепт', { a: 'myrecipe' }, 'positive'), textButton('Поделиться', { a: 'share' }, 'primary')],
+      [menu]
     ]);
   }
   return null;
@@ -72,7 +73,7 @@ function hubText(id) {
     morning: 'Завтрак.\nКаши, яичница, сырники и напитки. Напишите своё, например «овсянка на 2».',
     sweetbox: 'Сладкое.\nДомашняя выпечка, десерты и отдельно раздел для кондитера: торты, кремы, без аллергенов и диетическая.',
     pick: 'Подбор.\n«Из того, что есть» — блюдо из продуктов дома. «Быстрый ужин» — за несколько минут. «Случайное блюдо» — идея. «Без аллергенов» и «Диетическое» — бытовые ограничения, не назначение врача.',
-    mine: 'Мои рецепты.\n«Избранное» — то, что вы сохранили. «Мой рецепт» — пришлите свой текст. «Поделиться» — отправить открытый рецепт друзьям или на стену сообщества.'
+    mine: 'Мои рецепты.\n«Избранное» — короткие закладки. «Моя база» — рецепты, которые вы сохранили по полкам. «Мой рецепт» — пришлите свой текст из нужного раздела. «Поделиться» — отправить открытый рецепт друзьям или на стену сообщества.'
   };
   return texts[id] || '';
 }
@@ -104,9 +105,10 @@ function recipeKeyboard(recipe) {
     rows.push([textButton('Другой рецепт', { a: 'another' }, 'secondary')]);
   }
   rows.push([
-    textButton('Поделиться', { a: 'share' }, 'primary'),
-    textButton('Мой рецепт', { a: 'myrecipe' }, 'positive')
+    textButton('В базу', { a: 'keep' }, 'positive'),
+    textButton('Поделиться', { a: 'share' }, 'primary')
   ]);
+  rows.push([textButton('Мой рецепт', { a: 'myrecipe' }, 'secondary')]);
   rows.push([textButton('В меню', { a: 'menu' }, 'secondary')]);
   return board(rows);
 }

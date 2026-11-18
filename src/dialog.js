@@ -58,7 +58,8 @@ const FILLER = new Set([
   'рецепт', 'блюдо', 'побыстрее', 'быстрее', 'просто', 'очень', 'только', 'потом'
 ]);
 
-const LIMIT_TEXT = 'На сегодня лимит запросов к повару закончился. Избранное, шаги и список покупок по уже готовому рецепту работают без нового запроса. Завтра снова можно спрашивать.';
+const LIMIT_TEXT = 'На сегодня лимит запросов закончился. Избранное, шаги и список покупок по уже открытому рецепту работают без нового запроса. Завтра снова можно спрашивать.';
+const SEEK = 'Ищу рецепт в базе.';
 
 function blankUser(id) {
   return {
@@ -132,15 +133,17 @@ function helpText(communityName) {
     'Завтрак — завтраки и напитки.',
     'Сладкое — выпечка, десерты, торты и пирожные. У кондитера есть свои безаллергенные и диетические подразделы.',
     'Подбор — «Из того, что есть» готовит из продуктов дома. «Быстрый ужин» укладывается в несколько минут. «Случайное блюдо» предлагает идею. «Без аллергенов» и «Диетическое» — обычная домашняя еда, не назначение врача.',
-    'Мои рецепты — сохранённые рецепты и ваш собственный текст.',
+    'Мои рецепты — избранное, ваша база и собственный текст.',
+    'Кнопка раздела ничего не ищет сама. Сначала откройте полку, например «Супы», и напишите блюдо: «борщ на 4».',
     '',
     'Кнопки у рецепта',
-    'В избранное — запомнить рецепт. Потом откройте «Избранное» или напишите «открой 1». «удали 2» убирает второй.',
+    'В избранное — короткая закладка. Потом откройте «Избранное» или напишите «открой 1». «удали 2» убирает второй.',
+    'В базу — сохранить этот рецепт на полку, в которой вы его искали. В чужой раздел он не попадёт. «Моя база» показывает, что уже лежит.',
     'Список покупок — продукты, которые нужно купить для этого блюда. Это не оплата и не заказ.',
     'Готовить по шагам — один шаг за раз. «Дальше» показывает следующий.',
     'Другой рецепт — похожее блюдо, не копия текущего.',
     'Поделиться — текст рецепта можно переслать. «На стену» публикует его в сообществе.',
-    'Мой рецепт — пришлите свой рецепт одним сообщением: название, продукты и шаги. Бот сохранит его, и его тоже можно выложить на стену.',
+    'Мой рецепт — пришлите свой рецепт одним сообщением: название, продукты и шаги. Если перед этим открыть раздел, рецепт ляжет на эту полку.',
     '',
     'В беседе отвечаю, если в сообщении есть «рецепт», моё имя, ответ на моё сообщение или упоминание сообщества.',
     'Фото не разбираю.'
@@ -172,6 +175,8 @@ function actionOf(text, payload) {
   if (['покупки', 'список покупок', 'что купить', 'список'].includes(value)) return 'shop';
   if (['по шагам', 'шаги', 'шаг', 'сначала', 'с начала', 'готовить по шагам'].includes(value)) return 'steps';
   if (['дальше', 'далее', 'следующий', 'следующий шаг'].includes(value)) return 'next';
+  if (['сохрани в базу', 'в базу'].includes(value)) return 'keep';
+  if (['моя база', 'база'].includes(value)) return 'base';
   if (['сохрани', 'в избранное', 'избранное сохранить'].includes(value)) return 'save';
   if (['еще вариант', 'другой вариант', 'другой рецепт'].includes(value)) return 'another';
   if (['поделиться', 'на стену'].includes(value)) return value === 'на стену' ? 'wall' : 'share';
@@ -372,6 +377,9 @@ function showStep(user, index) {
 function jobReply(user, job) {
   user.mode = 'menu';
   user.draft = {};
+  if (job.kind === 'section' && job.data && job.data.section) user.lastCategory = job.data.section;
+  else if (job.kind !== 'followup') user.lastCategory = '';
+  user.lastQuery = String(job.memory || '');
   return { user, messages: [say(job.ask, backKeyboard())], job };
 }
 
@@ -400,32 +408,42 @@ function beginDiet(user) {
 function openSection(user, id) {
   const node = sectionById(id);
   if (!node) return { user, messages: [say('Такого раздела нет.', menuKeyboard())], job: null };
-  if (!node.children) return makeSection(user, id, '', null);
   user.mode = 'section';
   user.draft = { section: id };
+  user.lastCategory = id;
   return { user, messages: [say(sectionText(id), sectionKeyboard(id))], job: null };
+}
+
+function vagueDish(name, id) {
+  const node = sectionById(id);
+  if (!node) return false;
+  const value = normalize(name);
+  const titles = [node.title, node.short].map(normalize).filter(Boolean);
+  if (titles.includes(value)) return true;
+  return titles.some(title => title.startsWith(value) && title.length - value.length <= 2);
 }
 
 function makeSection(user, id, dish, servings) {
   const node = sectionById(id);
   if (!node) return { user, messages: [say('Такого раздела нет.', menuKeyboard())], job: null };
   const name = String(dish || '').trim();
+  if (!dishNameOk(name) || vagueDish(name, id)) return openSection(user, id);
   const data = {
+    section: id,
     title: node.title,
     brief: node.brief,
     dish: name,
     servings: servings == null ? 0 : servings,
-    text: [node.title, node.brief, name].filter(Boolean).join('. ')
+    text: [node.title, name].filter(Boolean).join('. ')
   };
-  return jobReply(user, aiJob('section', data, 'Собираю рецепт…'));
+  return jobReply(user, aiJob('section', data, SEEK));
 }
 
 function fromSectionDish(user, id, text) {
   const servings = readServings(text);
   const name = cleanDish(text);
-  if (!dishNameOk(name)) {
-    const keyboard = sectionKeyboard(id) || menuKeyboard();
-    return { user, messages: [say('Напишите блюдо в этом разделе или нажмите кнопку.', keyboard)], job: null };
+  if (!dishNameOk(name) || vagueDish(name, id)) {
+    return { user, messages: [say('Напишите конкретное блюдо в этом разделе. Одной кнопки раздела мало.', sectionKeyboard(id) || menuKeyboard())], job: null };
   }
   return makeSection(user, id, name, servings);
 }
@@ -448,7 +466,7 @@ function finishServings(user, servings) {
   const kind = draft.kind || 'dish';
   if (kind === 'ingredients' && !draft.products) return beginIngredients(user);
   if (kind === 'dish' && !draft.dish) return beginDish(user);
-  const ask = kind === 'ingredients' ? 'Смотрю, что из этого получится…' : 'Собираю рецепт…';
+  const ask = SEEK;
   return jobReply(user, aiJob(kind, draft, ask));
 }
 
@@ -464,7 +482,7 @@ function fromDishText(user, text) {
     return { user, messages: [say('Напишите название блюда, например «сырники» или «борщ на 6».', backKeyboard())], job: null };
   }
   if (servings == null) return askServings(user, { kind: 'dish', dish: name });
-  return jobReply(user, aiJob('dish', { dish: name, servings }, 'Собираю рецепт…'));
+  return jobReply(user, aiJob('dish', { dish: name, servings }, SEEK));
 }
 
 function fromIngredientsText(user, text) {
@@ -479,19 +497,19 @@ function fromIngredientsText(user, text) {
   }
   const servings = readServings(text);
   if (servings == null) return askServings(user, { kind: 'ingredients', products });
-  return jobReply(user, aiJob('ingredients', { products, servings }, 'Смотрю, что из этого получится…'));
+  return jobReply(user, aiJob('ingredients', { products, servings }, SEEK));
 }
 
 function fromQuick(user, minutes) {
   const n = Number(minutes);
   if (!Number.isInteger(n) || n < 5 || n > 180) return beginQuick(user);
-  return jobReply(user, aiJob('quick', { minutes: n }, 'Подбираю быстрый ужин…'));
+  return jobReply(user, aiJob('quick', { minutes: n }, SEEK));
 }
 
 function fromDiet(user, code) {
   const diet = DIETS[code];
   if (!diet) return beginDiet(user);
-  return jobReply(user, aiJob('diet', { diet, code }, 'Подбираю блюдо…'));
+  return jobReply(user, aiJob('diet', { diet, code }, SEEK));
 }
 
 function dietFromText(text) {
@@ -502,15 +520,15 @@ function dietFromText(text) {
 
 function fromRandom(user) {
   const theme = THEMES[((user.usageCount || 0) + (user.favorites || []).length) % THEMES.length];
-  return jobReply(user, aiJob('random', { theme }, 'Ищу идею…'));
+  return jobReply(user, aiJob('random', { theme }, SEEK));
 }
 
 function fromFollow(user, text) {
-  return jobReply(user, aiJob('followup', { text, recipe: user.lastRecipe }, 'Уточняю рецепт…'));
+  return jobReply(user, aiJob('followup', { text, recipe: user.lastRecipe }, SEEK));
 }
 
 function fromChat(user, text) {
-  return jobReply(user, aiJob('chat', { text, recipe: user.lastRecipe }, 'Думаю…'));
+  return jobReply(user, aiJob('chat', { text, recipe: user.lastRecipe }, SEEK));
 }
 
 function ownTitle(text) {
@@ -519,11 +537,12 @@ function ownTitle(text) {
 }
 
 function beginOwn(user) {
+  const section = (user.draft && user.draft.section) || user.lastCategory || '';
   user.mode = 'own';
-  user.draft = {};
+  user.draft = { section };
   return {
     user,
-    messages: [say('Напишите свой рецепт одним сообщением: название, продукты и как готовить.', backKeyboard())],
+    messages: [say('Напишите свой рецепт одним сообщением: название, продукты и как готовить. Он сохранится в вашу базу.', backKeyboard())],
     job: null
   };
 }
@@ -538,14 +557,46 @@ function fromOwn(user, text) {
     };
   }
   const title = ownTitle(body);
+  const category = (user.draft && user.draft.section) || '';
+  const node = sectionById(category);
   user.mode = 'menu';
+  user.lastCategory = category;
   user.pendingShare = { title, body, source: 'own' };
+  const where = node ? ` Раздел: «${node.title}». В других разделах он не всплывёт.` : ' Раздел не выбран, поэтому по полкам он не ищется — только по точному названию.';
   return {
     user,
-    messages: [say(`Сохранила «${title}».\n\nЕго можно переслать из этой переписки или нажать «На стену» — рецепт появится в сообществе.`, shareKeyboard())],
+    messages: [say(`Сохранила «${title}» в вашу базу.${where}\n\nЕго можно переслать из этой переписки или нажать «На стену».`, shareKeyboard())],
     job: null,
-    share: { title, body, source: 'own' }
+    share: { title, body, source: 'own' },
+    catalog: { category, title, query: title, recipe: null, body, source: 'own' }
   };
+}
+
+function keepInBase(user) {
+  if (!user.lastRecipe) return noRecipe(user);
+  const title = user.lastRecipe.title || 'Рецепт';
+  const category = user.lastCategory || '';
+  const node = sectionById(category);
+  const where = node ? ` в раздел «${node.title}»` : '';
+  return {
+    user,
+    messages: [say(`Сохранила «${title}» в вашу базу${where}. В другом разделе этот рецепт не покажется.`, recipeKeyboard(user.lastRecipe))],
+    job: null,
+    catalog: {
+      category,
+      title,
+      query: user.lastQuery || title,
+      recipe: user.lastRecipe,
+      body: formatRecipe(user.lastRecipe),
+      source: 'found'
+    }
+  };
+}
+
+function showBase(user) {
+  user.mode = 'menu';
+  user.draft = {};
+  return { user, messages: [], job: null, listCatalog: true };
 }
 
 function shareCurrent(user) {
@@ -621,9 +672,9 @@ function routeFreeText(user, text) {
   if (quick) return fromQuick(user, quick);
   const servings = readServings(text);
   const dish = cleanDish(text);
-  if (servings != null && dishNameOk(dish)) return jobReply(user, aiJob('dish', { dish, servings }, 'Собираю рецепт…'));
+  if (servings != null && dishNameOk(dish)) return jobReply(user, aiJob('dish', { dish, servings }, SEEK));
   if (/^(?:рецепт|как приготовить|как сделать)(?:\s|$)/i.test(text) && dishNameOk(dish)) {
-    return jobReply(user, aiJob('dish', { dish, servings: 0 }, 'Собираю рецепт…'));
+    return jobReply(user, aiJob('dish', { dish, servings: 0 }, SEEK));
   }
   if (dishNameOk(dish)) return fromChat(user, text);
   return { user, messages: [say('Напишите блюдо или продукты. «Помощь» покажет примеры.', menuKeyboard())], job: null };
@@ -650,7 +701,7 @@ function turn(user, input, ctx) {
   if (isGreeting(text) && !payload && place !== 'chat') return menuTurn(source, ctx);
   if (!text && !payload) {
     if (incoming.photo) {
-      return { user: source, messages: [say('Фото пока не разбираю. Напишите продукты списком — подберу рецепт.', menuKeyboard())], job: null };
+      return { user: source, messages: [say('Фото пока не разбираю. Напишите продукты списком — найду рецепт в базе.', menuKeyboard())], job: null };
     }
     if (incoming.mentioned && place === 'chat') return menuTurn(source, ctx);
     return { user: source, messages: [], job: null, ignore: true };
@@ -659,7 +710,7 @@ function turn(user, input, ctx) {
   if (payload && payload.a === 'minutes') return fromQuick(source, Number(payload.n));
   if (payload && payload.a === 'pickdiet') return fromDiet(source, String(payload.d || ''));
   if (payload && payload.a === 'section') return openSection(source, String(payload.s || ''));
-  if (payload && payload.a === 'make') return makeSection(source, String(payload.s || ''), '', null);
+  if (payload && payload.a === 'make') return openSection(source, String(payload.s || ''));
   if (payload && payload.a === 'hub') return openHub(source, String(payload.h || ''));
   if (payload && payload.a === 'open') return openFavorite(source, Number(payload.i));
   const hub = !payload && hubByText(text);
@@ -676,6 +727,8 @@ function turn(user, input, ctx) {
   if (action === 'steps') return showStep(source, 0);
   if (action === 'next') return showStep(source, (source.stepIndex || 0) + (source.mode === 'steps' ? 1 : 0));
   if (action === 'save') return saveFavorite(source, (ctx && ctx.now) || new Date());
+  if (action === 'keep') return keepInBase(source);
+  if (action === 'base') return showBase(source);
   if (action === 'another') {
     if (source.lastRecipe) return fromFollow(source, `Другой вариант вместо «${source.lastRecipe.title}». Не повторяй это блюдо.`);
     return fromRandom(source);
@@ -716,7 +769,8 @@ function complete(user, job, raw, ctx) {
   next.mode = 'menu';
   next.draft = {};
   remember(next, job.memory || job.prompt, answer);
-  bumpUsage(next, now, 'dm');
+  if (job.kind === 'section' && job.data && job.data.section) next.lastCategory = job.data.section;
+  if (!ctx || !ctx.saved) bumpUsage(next, now, 'dm');
   const keyboard = recipe || next.lastRecipe ? recipeKeyboard(recipe || next.lastRecipe) : menuKeyboard();
   return {
     user: next,
@@ -726,11 +780,34 @@ function complete(user, job, raw, ctx) {
   };
 }
 
+function fromCatalog(user, job, found, ctx) {
+  const nextJob = job || { kind: 'dish', memory: found && found.title, prompt: '' };
+  if (found && found.recipe) {
+    const done = complete(user, nextJob, JSON.stringify(found.recipe), Object.assign({}, ctx, { saved: true }));
+    if (done.messages[0]) done.messages[0].text = `Нашла в вашей базе.\n\n${done.messages[0].text}`;
+    if (found.category) done.user.lastCategory = found.category;
+    done.recipe = true;
+    return done;
+  }
+  const next = structuredClone(user);
+  next.mode = 'menu';
+  next.draft = {};
+  if (found && found.category) next.lastCategory = found.category;
+  const body = String((found && found.body) || '').trim() || 'Рецепт в базе пустой. Напишите название ещё раз.';
+  return {
+    user: next,
+    messages: [{ text: shown(`Нашла в вашей базе.\n\n${body}`, ctx, nextJob.memory), keyboard: menuKeyboard() }],
+    commentText: '',
+    recipe: true
+  };
+}
+
 module.exports = {
   blankUser,
   overLimit,
   turn,
   complete,
+  fromCatalog,
   limitTurn,
   chatAddressed,
   actionOf,

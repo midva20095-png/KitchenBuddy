@@ -2,6 +2,8 @@
 
 const fs = require('fs/promises');
 const path = require('path');
+const { normalize } = require('./text');
+const { matchCatalog } = require('./catalog');
 
 function createStore(dir) {
   const file = path.join(dir, 'kitchen.json');
@@ -27,6 +29,7 @@ function createStore(dir) {
     if (!Array.isArray(memory.comments)) memory.comments = [];
     if (!memory.cards || typeof memory.cards !== 'object') memory.cards = {};
     if (!Array.isArray(memory.shared)) memory.shared = [];
+    if (!Array.isArray(memory.catalog)) memory.catalog = [];
     return memory;
   }
 
@@ -135,6 +138,58 @@ function createStore(dir) {
         if (data.shared.length > 200) data.shared.splice(0, data.shared.length - 200);
         await persist();
         return { id: row.id };
+      });
+    },
+    saveCatalog(userId, item) {
+      const id = String(userId || '').replace(/\D/g, '');
+      return enqueue(async () => {
+        if (!id || !item) return null;
+        const data = await load();
+        const title = String(item.title || 'Рецепт').slice(0, 80);
+        const category = String(item.category || '').slice(0, 40);
+        const row = {
+          userId: id,
+          category,
+          title,
+          query: String(item.query || title).slice(0, 200),
+          recipe: item.recipe && typeof item.recipe === 'object' ? item.recipe : null,
+          body: String(item.body || '').slice(0, 4000),
+          source: item.source === 'own' ? 'own' : 'found',
+          createdAt: new Date().toISOString()
+        };
+        const same = data.catalog.find(entry => entry.userId === id && entry.category === category && normalize(entry.title) === normalize(title));
+        if (same) {
+          Object.assign(same, row);
+        } else {
+          data.catalog.push(row);
+        }
+        const mine = data.catalog.filter(entry => entry.userId === id);
+        if (mine.length > 100) {
+          const drop = new Set(mine.slice(0, mine.length - 100));
+          data.catalog = data.catalog.filter(entry => !drop.has(entry));
+        }
+        await persist();
+        return { title: row.title };
+      });
+    },
+    findCatalog(userId, query) {
+      const id = String(userId || '').replace(/\D/g, '');
+      return enqueue(async () => {
+        const data = await load();
+        const rows = data.catalog.filter(entry => entry.userId === id).slice().reverse();
+        return matchCatalog(rows, query);
+      });
+    },
+    listCatalog(userId) {
+      const id = String(userId || '').replace(/\D/g, '');
+      return enqueue(async () => {
+        const data = await load();
+        return data.catalog.filter(entry => entry.userId === id).slice(-30).reverse().map(entry => ({
+          category: entry.category,
+          title: entry.title,
+          query: entry.query,
+          source: entry.source
+        }));
       });
     },
     markShared(id, postId) {

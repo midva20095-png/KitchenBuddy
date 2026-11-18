@@ -56,7 +56,7 @@ test('личный диалог проводит рецепт до избран�
   assert.match(prompts[0].system, /Кухня/);
   assert.equal(typing.length, 1);
   const card = sent.map(item => item.text).join('\n');
-  assert.match(card, /Собираю рецепт/);
+  assert.match(card, /Ищу рецепт в базе/);
   assert.match(card, /🍳 Борщ/);
   assert.match(card, /свекла/);
 
@@ -101,7 +101,7 @@ test('лимит, сбой и опасный запрос не светят кл
   assert.match(sent.at(-1).text, /лимит/);
 
   await bot.handle({ userId: '3', peerId: 3, text: 'омлет', place: 'dm', messageId: 2 });
-  assert.match(sent.map(item => item.text).join('\n'), /не ответил/);
+  assert.match(sent.map(item => item.text).join('\n'), /нет ответа/);
   assert.doesNotMatch(sent.map(item => item.text).join('\n'), /secret-key/);
   assert.equal((await store.getUser('3')).usageCount, 0);
 
@@ -160,7 +160,7 @@ test('беседа молчит, пока её не попросили, а ст�
   assert.equal(sent.length, 0);
   await bot.handle({ userId: '11', peerId: 2000000001, text: 'рецепт оладий', place: 'chat', messageId: 2 });
   assert.equal(sent.at(-1).peer, 2000000001);
-  assert.match(sent.map(item => item.text).join('\n'), /бульона|Собираю/);
+  assert.match(sent.map(item => item.text).join('\n'), /бульона|Ищу рецепт в базе/);
 
   await bot.handle({
     userId: '9', place: 'wall', text: 'спасибо большое', postId: 3, commentId: 30
@@ -215,4 +215,54 @@ test('неподписчику в личке уходит ссылка, бесе
   assert.match(sent.at(-1).text, /club243405772/);
   await bot.handle({ userId: '12', peerId: 2000000002, text: 'привет', place: 'chat', messageId: 2 });
   assert.equal(sent.length, 1);
+});
+
+test('рецепт из базы находится только в своём разделе', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  const sent = [];
+  let calls = 0;
+  const bot = createBot({
+    store,
+    config: {
+      groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: '',
+      dailyLimit: 40, wallHourLimit: 30, aiParallel: 2
+    },
+    now: () => now,
+    giga: {
+      complete: async () => {
+        calls += 1;
+        return RECIPE;
+      }
+    },
+    send: async (peer, text) => { sent.push(text); },
+    comment: async () => {},
+    typing: async () => {}
+  });
+
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 1 });
+  assert.equal(calls, 0);
+  assert.match(sent.at(-1), /конкретное блюдо/);
+
+  await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 2 });
+  assert.equal(calls, 1);
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'keep' }, place: 'dm', messageId: 3 });
+  assert.match(sent.at(-1), /вашу базу/);
+  const stored = await store.findCatalog('20', { category: 'soup', dish: 'борщ' });
+  assert.equal(stored.title, 'Борщ');
+  assert.equal((await store.findCatalog('20', { category: 'cake', dish: 'борщ' })), null);
+
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 4 });
+  await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 5 });
+  assert.equal(calls, 1);
+  assert.match(sent.at(-1), /Нашла в вашей базе/);
+  assert.equal((await store.getUser('20')).usageCount, 1);
+
+  await bot.handle({ userId: '20', peerId: 20, text: 'моя база', place: 'dm', messageId: 6 });
+  assert.match(sent.at(-1), /Борщ/);
+
+  await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'cake' }, place: 'dm', messageId: 7 });
+  await bot.handle({ userId: '20', peerId: 20, text: 'медовик на 8', place: 'dm', messageId: 8 });
+  assert.equal(calls, 2);
+  assert.doesNotMatch(sent.at(-1), /Нашла в вашей базе/);
 });

@@ -28,7 +28,7 @@ test('свободный текст становится рецептом, ут�
   assert.equal(dish.job.kind, 'dish');
   assert.match(dish.job.prompt, /Блюдо: борщ/);
   assert.match(dish.job.prompt, /Порции: 6/);
-  assert.match(dish.messages[0].text, /Собираю рецепт/);
+  assert.match(dish.messages[0].text, /Ищу рецепт в базе/);
 
   const named = turn(blankUser('1'), { text: 'рецепт сырников' }, ctx);
   assert.equal(named.job.kind, 'dish');
@@ -140,15 +140,20 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(diet.messages[0].text, /не лечебная диета/);
 
   const cake = turn(pastry.user, { payload: { a: 'make', s: 'cake' } }, ctx);
-  assert.equal(cake.job.kind, 'section');
-  assert.match(cake.job.prompt, /торт/i);
+  assert.equal(cake.job, null);
+  assert.equal(cake.user.mode, 'section');
+  assert.match(cake.messages[0].text, /конкретное блюдо/);
+
+  const named = turn(cake.user, { text: 'торты' }, ctx);
+  assert.equal(named.job, null);
 
   const typed = turn(pastry.user, { text: 'медовик на 8' }, ctx);
   assert.equal(typed.job.kind, 'section');
+  assert.match(typed.messages[0].text, /Ищу рецепт в базе/);
   assert.match(typed.job.prompt, /медовик/);
   assert.match(typed.job.prompt, /Порции: 8/);
 
-  const done = complete(cake.user, cake.job, RECIPE, Object.assign({}, ctx, {
+  const done = complete(typed.user, typed.job, RECIPE, Object.assign({}, ctx, {
     lessons: [{ title: 'Торт медовик', url: 'https://vk.ru/wall-1_9', kind: 'masterclass', keys: 'торт медовик коржи' }]
   }));
   assert.match(done.messages[0].text, /🍳 Борщ/);
@@ -159,6 +164,12 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(done.messages[0].text, /Баба Яга/);
   assert.match(done.messages[0].text, /Точки и линии/);
   assert.doesNotMatch(done.user.history[1].content, /ЯгаГенератор/);
+  assert.equal(done.user.usageCount, 1);
+
+  const kept = turn(done.user, { payload: { a: 'keep' } }, ctx);
+  assert.equal(kept.catalog.category, 'pastry');
+  assert.equal(kept.catalog.recipe.title, 'Борщ');
+  assert.equal(kept.user.usageCount, 1);
 });
 
 test('меню по разделам, справка и свой рецепт', () => {
@@ -179,6 +190,8 @@ test('меню по разделам, справка и свой рецепт', 
   assert.equal(own.user.mode, 'own');
   own = turn(own.user, { text: 'Сырники\nТворог и яйцо\nСмешайте и обжарьте.' }, ctx);
   assert.equal(own.share.title, 'Сырники');
+  assert.equal(own.catalog.source, 'own');
+  assert.equal(own.catalog.category, '');
   assert.match(labels(own.messages[0].keyboard).join(' '), /На стену/);
 
   const posted = turn(own.user, { payload: { a: 'wall' } }, ctx);

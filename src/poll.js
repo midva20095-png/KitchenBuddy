@@ -39,6 +39,13 @@ async function startPoll(options) {
         failLogged = false;
         console.log(`ВК ${vk.groupId} подключён, жду сообщения.`);
         try { await vk.enable(); } catch (error) {}
+        if (!state.widgetTried && options.placeButton) {
+          state.widgetTried = true;
+          options.placeButton(vk).catch(error => {
+            const text = error && error.message ? error.message : 'не встала';
+            console.error(`Кнопка «Поиск рецептов»: ${text}`);
+          });
+        }
       }
       for (;;) {
         let packet;

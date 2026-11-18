@@ -1,6 +1,7 @@
 'use strict';
 
 const { Pool } = require('pg');
+const { matchCatalog } = require('./catalog');
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS clients (
@@ -47,7 +48,19 @@ const SCHEMA = [
     status TEXT NOT NULL DEFAULT 'saved',
     post_id BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`
+  )`,
+  `CREATE TABLE IF NOT EXISTS catalog_recipes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    category TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL,
+    query TEXT NOT NULL DEFAULT '',
+    recipe JSONB,
+    body TEXT,
+    source TEXT NOT NULL DEFAULT 'found',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS catalog_user_idx ON catalog_recipes (user_id, id DESC)`
 ];
 
 function poolConfig(connectionString) {
@@ -190,6 +203,82 @@ function createClients(connectionString, options) {
       ]
     );
     return { id: result.rows[0] ? String(result.rows[0].id) : '' };
+  }
+
+  function catalogRow(row) {
+    return {
+      id: String(row.id),
+      category: row.category || '',
+      title: row.title || '',
+      query: row.query || '',
+      recipe: row.recipe && typeof row.recipe === 'object' ? row.recipe : null,
+      body: row.body || '',
+      source: row.source || 'found'
+    };
+  }
+
+  async function saveCatalog(userId, item) {
+    const id = cleanId(userId);
+    if (!id || !item) return null;
+    const title = cleanText(item.title || 'Рецепт', 80);
+    const category = cleanText(item.category || '', 40);
+    const queryText = cleanText(item.query || title, 200);
+    const body = String(item.body || '').slice(0, 4000);
+    const source = item.source === 'own' ? 'own' : 'found';
+    const recipe = item.recipe && typeof item.recipe === 'object' ? JSON.stringify(item.recipe) : null;
+    const existing = await query(
+      `SELECT id FROM catalog_recipes
+       WHERE user_id = $1 AND category = $2 AND lower(title) = lower($3)
+       ORDER BY id DESC LIMIT 1`,
+      [id, category, title]
+    );
+    if (existing.rows[0]) {
+      await query(
+        `UPDATE catalog_recipes SET query = $2, recipe = $3::jsonb, body = $4, source = $5 WHERE id = $1`,
+        [existing.rows[0].id, queryText, recipe, body, source]
+      );
+      return { id: String(existing.rows[0].id) };
+    }
+    const inserted = await query(
+      `INSERT INTO catalog_recipes (user_id, category, title, query, recipe, body, source)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+       RETURNING id`,
+      [id, category, title, queryText, recipe, body, source]
+    );
+    await query(
+      `DELETE FROM catalog_recipes WHERE id IN (
+         SELECT id FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC OFFSET 100
+       )`,
+      [id]
+    );
+    return { id: inserted.rows[0] ? String(inserted.rows[0].id) : '' };
+  }
+
+  async function findCatalog(userId, lookup) {
+    const id = cleanId(userId);
+    if (!id) return null;
+    const result = await query(
+      `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+       FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC LIMIT 200`,
+      [id]
+    );
+    return matchCatalog(result.rows.map(catalogRow), lookup);
+  }
+
+  async function listCatalog(userId) {
+    const id = cleanId(userId);
+    if (!id) return [];
+    const result = await query(
+      `SELECT id::text AS id, category, title, query, source
+       FROM catalog_recipes WHERE user_id = $1 ORDER BY id DESC LIMIT 30`,
+      [id]
+    );
+    return result.rows.map(row => ({
+      category: row.category || '',
+      title: row.title || '',
+      query: row.query || '',
+      source: row.source || 'found'
+    }));
   }
 
   async function markShared(id, postId) {
@@ -345,6 +434,9 @@ function createClients(connectionString, options) {
     hasComment,
     markComment,
     saveShared,
+    saveCatalog,
+    findCatalog,
+    listCatalog,
     markShared,
     stats,
     listClients,
