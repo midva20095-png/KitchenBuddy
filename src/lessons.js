@@ -72,7 +72,7 @@ function plain(value) {
 
 function kindOf(text, fallback) {
   const source = String(text || '').toLowerCase();
-  if (/мастер|урок|обучен/.test(source)) return 'masterclass';
+  if (/мастер|урок|обучен|(?:^|[^а-яё])мк(?:[^а-яё]|$)/.test(source)) return 'masterclass';
   if (/стать/.test(source)) return 'article';
   return fallback || 'recipe';
 }
@@ -214,7 +214,9 @@ function collectLessons(source, groupId) {
     const keys = plain(`${video.title || ''} ${video.description || ''}`);
     remember(lessons, seenTitle, seenUrl, {
       title: video.title,
-      url: video.id != null && video.owner_id != null ? `https://vk.ru/video${video.owner_id}_${video.id}` : '',
+      url: video.url
+        ? vkUrl(video.url)
+        : (video.id != null && video.owner_id != null ? `https://vk.ru/video${video.owner_id}_${video.id}` : ''),
       kind: kindOf(keys, 'video'),
       keys
     });

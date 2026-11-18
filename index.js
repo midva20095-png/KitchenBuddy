@@ -5,6 +5,7 @@ require('dotenv').config();
 const path = require('path');
 const { loadConfig } = require('./src/config');
 const { loadLessons, collectLessons } = require('./src/lessons');
+const { loadPublicCatalog } = require('./src/source-public');
 const { createStore } = require('./src/store');
 const { createClients } = require('./src/clients');
 const { createGigaChat } = require('./src/gigachat');
@@ -25,43 +26,35 @@ const state = {
 
 const giga = createGigaChat({ env: process.env });
 const vk = config.token ? createVk({ token: config.token, groupId: config.groupId }) : null;
-const sourceVk = config.sourceToken
-  ? createVk({ token: config.sourceToken, groupId: config.sourceGroupId })
-  : vk;
 const fileLessons = loadLessons(path.join(config.dataDir, 'lessons.json'));
 const lessons = fileLessons.slice();
 
-async function readPart(title, load) {
+async function refreshSource() {
+  if (!config.sourceGroupId) return;
+  const id = config.sourceGroupId;
   try {
-    return await load();
+    const bundle = await loadPublicCatalog({ groupId: id });
+    const posts = bundle.posts || [];
+    const donut = bundle.donut || [];
+    const articles = bundle.articles || [];
+    const videos = bundle.videos || [];
+    const goods = bundle.goods || [];
+    const fresh = collectLessons({
+      posts: posts.concat(donut),
+      articles,
+      videos,
+      albums: bundle.albums,
+      goods,
+      menu: bundle.menu
+    }, id);
+    lessons.splice(0, lessons.length, ...fileLessons.concat(fresh));
+    const missed = bundle.problems && bundle.problems.length ? ` Не открылись: ${bundle.problems.join(', ')}.` : '';
+    const keys = config.sourceTokenConfigured ? 'Ключи обоих сообществ уже в переменных.' : 'Ключ KitchenBuddy уже в переменных.';
+    console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, платные ${donut.length}, статьи ${articles.length}, видео ${videos.length}, товары ${goods.length}.${missed} ${keys} Стену и статьи ВК ключу сообщества не отдаёт, поэтому каталог взят с открытой страницы. В чат «Баба Яга» бот не подключается.`);
   } catch (error) {
     const code = error && error.code ? ` (${error.code})` : '';
-    console.error(`«Баба Яга», ${title} не прочитались${code}.`);
-    return [];
+    console.error(`Каталог «Баба Яга» не прочитался${code}. В чат этого сообщества бот не подключается.`);
   }
-}
-
-let sourceHintShown = false;
-
-async function refreshSource() {
-  if (!sourceVk || !config.sourceGroupId) return;
-  const id = config.sourceGroupId;
-  if (!config.sourceToken && !sourceHintShown) {
-    sourceHintShown = true;
-    console.log('Ключ второго сообщества не задан (SOURCE_GROUP_TOKEN). Читаю материалы ключом KitchenBuddy. В чат «Баба Яга» бот не подключается.');
-  }
-  const [posts, donut, articles, videos, albums, goods, menu] = await Promise.all([
-    readPart('стена', () => sourceVk.wallPosts(id)),
-    readPart('платные записи', () => sourceVk.donutPosts(id)),
-    readPart('статьи', () => sourceVk.articles(id)),
-    readPart('видео', () => sourceVk.videos(id)),
-    readPart('альбомы', () => sourceVk.albums(id)),
-    readPart('товары', () => sourceVk.goods(id)),
-    readPart('меню', () => sourceVk.groupMenu(id))
-  ]);
-  const fresh = collectLessons({ posts: posts.concat(donut), articles, videos, albums, goods, menu }, id);
-  lessons.splice(0, lessons.length, ...fileLessons.concat(fresh));
-  console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, платные ${donut.length}, статьи ${articles.length}, видео ${videos.length}, альбомы ${albums.length}, товары ${goods.length}. В чат этого сообщества бот не подключается.`);
 }
 
 function sleep(ms) {
@@ -142,3 +135,11 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+process.on('unhandledRejection', error => {
+  const code = error && error.code ? ` (${error.code})` : '';
+  console.error(`Сбой без остановки${code}. Бот продолжает работать.`);
+});
+process.on('uncaughtException', error => {
+  const code = error && error.code ? ` (${error.code})` : '';
+  console.error(`Сбой без остановки${code}. Бот продолжает работать.`);
+});
