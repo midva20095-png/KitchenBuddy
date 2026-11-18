@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseRecipe, formatRecipe, formatShopping, formatStep, commentBody, asPlain } = require('../src/recipe');
+const { parseRecipe, formatRecipe, formatShopping, formatStep, commentBody, asPlain, titleFits } = require('../src/recipe');
 
 const RAW = '```json\n{"title":"Борщ","time":"90","servings":"6","ingredients":[{"amount":"2 шт.","name":"свекла"},"• капуста"],"steps":["1. Сварите бульон","Добавьте овощи"],"tip":"Дайте настояться"}\n```';
 
@@ -24,6 +24,13 @@ test('рецепт собирается из JSON и печатается кар
   assert.doesNotMatch(text, /\*\*|access_token/);
   assert.match(formatShopping(recipe), /Список покупок — Борщ/);
   assert.match(formatStep(recipe, 1), /шаг 2 из 2/);
+});
+
+test('название торта подходит без лишнего слова «торт»', () => {
+  assert.equal(titleFits('Молочная девочка', 'Молочная девочка торт'), true);
+  assert.equal(titleFits('Торт «Молочная девочка»', 'молочная девочка торт'), true);
+  assert.equal(titleFits('Борщ', 'медовик'), false);
+  assert.equal(titleFits('Борщ', 'Курица с рисом'), false);
 });
 
 test('обычный ответ не превращается в рецепт', () => {

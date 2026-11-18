@@ -92,10 +92,13 @@ function formatIdeas(ideas, topic) {
 
 function titleFits(title, dish) {
   const skip = new Set(['рецепт', 'блюдо', 'пожалуйста', 'можно', 'хочу', 'нужно', 'давай', 'давайте', 'домашний', 'домашняя', 'простой', 'простая', 'вкусный']);
+  const kind = new Set(['торт', 'торта', 'торты', 'тортик', 'пирог', 'пирога', 'пироги', 'кекс', 'кекса', 'десерт', 'выпечка', 'суп', 'супа', 'салат', 'каша']);
   const words = String(dish || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я0-9]+/).filter(word => word.length >= 3 && !skip.has(word));
   if (!words.length) return true;
+  const core = words.filter(word => !kind.has(word));
+  const needed = core.length ? core : words;
   const hay = String(title || '').toLowerCase().replace(/ё/g, 'е');
-  return words.every(word => hay.includes(word.length > 6 ? word.slice(0, 6) : word));
+  return needed.every(word => hay.includes(word.length > 6 ? word.slice(0, 6) : word));
 }
 
 function asPlain(raw) {

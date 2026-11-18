@@ -861,7 +861,7 @@ function complete(user, job, raw, ctx) {
     next.draft = {};
     return {
       user: next,
-      messages: [say(`Запрос был «${asked}». Открылся другой рецепт, его не показываю. Напишите это название ещё раз.`, backKeyboard())],
+      messages: [say(`На «${asked}» открылся другой рецепт, его не показываю. Напишите блюдо короче, без лишнего слова вроде «торт».`, backKeyboard())],
       commentText: '',
       recipe: false
     };
