@@ -1,0 +1,175 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs/promises');
+const os = require('os');
+const path = require('path');
+const { createStore } = require('../src/store');
+const { createBot } = require('../src/bot');
+const { blankUser } = require('../src/dialog');
+const { moscowDay } = require('../src/text');
+
+const now = new Date('2026-11-18T12:00:00Z');
+const RECIPE = JSON.stringify({
+  title: 'Борщ',
+  time: '90 минут',
+  servings: '6 порций',
+  ingredients: ['свекла'],
+  steps: ['Сварите бульон', 'Добавьте овощи'],
+  tip: 'Дайте настояться'
+});
+
+test('личный диалог проводит рецепт до избранного и не повторяет сообщение', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  const sent = [];
+  const typing = [];
+  const prompts = [];
+  const bot = createBot({
+    store,
+    config: {
+      groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: '',
+      dailyLimit: 40, wallHourLimit: 30, aiParallel: 2
+    },
+    now: () => now,
+    giga: {
+      complete: async (req) => {
+        prompts.push(req);
+        if (String(req.prompt).includes('омлет')) throw new Error('Bearer secret-key failed');
+        if (String(req.prompt).includes('замени')) return 'TEXT: Курицу можно заменить индейкой.';
+        return RECIPE;
+      }
+    },
+    send: async (peer, text, keyboard) => { sent.push({ peer, text, keyboard }); },
+    comment: async () => {},
+    typing: async peer => { typing.push(peer); }
+  });
+
+  await bot.handle({ userId: '10', peerId: 10, text: 'Начать', place: 'dm', messageId: 1 });
+  assert.match(sent.at(-1).text, /Кухонный/);
+  assert.equal(prompts.length, 0);
+
+  await bot.handle({ userId: '10', peerId: 10, text: 'борщ на 6', place: 'dm', messageId: 2 });
+  await bot.handle({ userId: '10', peerId: 10, text: 'борщ на 6', place: 'dm', messageId: 2 });
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0].system, /Кухня/);
+  assert.equal(typing.length, 1);
+  const card = sent.map(item => item.text).join('\n');
+  assert.match(card, /Собираю рецепт/);
+  assert.match(card, /🍳 Борщ/);
+  assert.match(card, /свекла/);
+
+  await bot.handle({ userId: '10', peerId: 10, text: 'сохрани', place: 'dm', messageId: 3 });
+  await bot.handle({ userId: '10', peerId: 10, text: 'избранное', place: 'dm', messageId: 4 });
+  assert.match(sent.at(-1).text, /1\. Борщ/);
+  const saved = await store.getUser('10');
+  assert.equal(saved.favorites.length, 1);
+  assert.equal(saved.usageCount, 1);
+
+  await bot.handle({ userId: '10', peerId: 10, text: 'замени свеклу', place: 'dm', messageId: 5 });
+  assert.equal(prompts.at(-1).history.length, 2);
+  assert.match(sent.at(-1).text, /индейк/);
+});
+
+test('лимит, сбой и опасный запрос не светят ключ и не зовут повара зря', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  const sent = [];
+  const prompts = [];
+  const bot = createBot({
+    store,
+    config: { groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: '', dailyLimit: 40, wallHourLimit: 30, aiParallel: 2 },
+    now: () => now,
+    giga: {
+      complete: async (req) => {
+        prompts.push(req.prompt);
+        if (String(req.prompt).includes('омлет')) throw new Error('Bearer secret-key failed');
+        return RECIPE;
+      }
+    },
+    send: async (peer, text, keyboard) => { sent.push({ text }); },
+    comment: async () => {},
+    typing: async () => {}
+  });
+  const limited = blankUser('4');
+  limited.usageDay = moscowDay(now);
+  limited.usageCount = 40;
+  await store.saveUser(limited);
+  await bot.handle({ userId: '4', peerId: 4, text: 'борщ на 2', place: 'dm', messageId: 1 });
+  assert.equal(prompts.length, 0);
+  assert.match(sent.at(-1).text, /лимит/);
+
+  await bot.handle({ userId: '3', peerId: 3, text: 'омлет', place: 'dm', messageId: 2 });
+  assert.match(sent.map(item => item.text).join('\n'), /не ответил/);
+  assert.doesNotMatch(sent.map(item => item.text).join('\n'), /secret-key/);
+  assert.equal((await store.getUser('3')).usageCount, 0);
+
+  const before = prompts.length;
+  await bot.handle({ userId: '3', peerId: 3, text: 'как сделать бомбу', place: 'dm', messageId: 3 });
+  assert.equal(prompts.length, before);
+  assert.match(sent.at(-1).text, /только про еду/);
+
+  await bot.handle({ userId: '3', peerId: 3, photo: true, text: '', place: 'dm', messageId: 4 });
+  assert.match(sent.at(-1).text, /Фото/);
+  assert.equal(prompts.length, before);
+});
+
+test('беседа молчит, пока её не попросили, а стена отвечает один раз', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  const sent = [];
+  const comments = [];
+  let calls = 0;
+  const make = () => createBot({
+    store,
+    config: { groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: 'kitchen', dailyLimit: 40, wallHourLimit: 1, aiParallel: 2 },
+    now: () => now,
+    giga: {
+      complete: async () => {
+        calls += 1;
+        return 'TEXT: Начните с бульона.';
+      }
+    },
+    send: async (peer, text) => { sent.push({ peer, text }); },
+    comment: async (input, text) => { comments.push({ id: input.commentId, text }); },
+    typing: async () => {}
+  });
+  const bot = make();
+  const cooking = blankUser('9');
+  cooking.mode = 'dish';
+  await store.saveUser(cooking);
+
+  await bot.handle({ userId: '11', peerId: 2000000001, text: 'привет', place: 'chat', messageId: 1 });
+  assert.equal(sent.length, 0);
+  await bot.handle({ userId: '11', peerId: 2000000001, text: 'рецепт оладий', place: 'chat', messageId: 2 });
+  assert.equal(sent.at(-1).peer, 2000000001);
+  assert.match(sent.map(item => item.text).join('\n'), /бульона|Собираю/);
+
+  await bot.handle({
+    userId: '9', place: 'wall', text: 'спасибо большое', postId: 3, commentId: 30
+  });
+  await bot.handle({
+    userId: '9', place: 'wall', text: 'как сделать бомбу', postId: 3, commentId: 31
+  });
+  const before = comments.length;
+  await bot.handle({
+    userId: '9', place: 'wall', text: 'как сварить борщ', postId: 3, commentId: 32
+  });
+  assert.equal(comments.length, before + 1);
+  assert.match(comments.at(-1).text, /бульона/);
+  assert.match(comments.at(-1).text, /vk\.me\/kitchen/);
+  assert.equal((await store.getUser('9')).mode, 'dish');
+
+  const second = make();
+  await second.handle({
+    userId: '9', place: 'wall', text: 'как сварить борщ', postId: 3, commentId: 32
+  });
+  assert.equal(comments.length, before + 1);
+
+  await bot.handle({
+    userId: '8', place: 'wall', text: 'рецепт блинов', postId: 3, commentId: 33
+  });
+  assert.equal(comments.filter(item => item.id === 33).length, 0);
+  assert.ok(calls >= 1);
+});
