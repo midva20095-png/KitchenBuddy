@@ -6,6 +6,10 @@ const { normalize } = require('./text');
 const { matchCatalog } = require('./catalog');
 const { familyIds } = require('./menu');
 
+function catalogKey() {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function createStore(dir) {
   const file = path.join(dir, 'kitchen.json');
   let chain = Promise.resolve();
@@ -148,7 +152,9 @@ function createStore(dir) {
         const data = await load();
         const title = String(item.title || 'Рецепт').slice(0, 80);
         const category = String(item.category || '').slice(0, 40);
+        const same = data.catalog.find(entry => entry.category === category && normalize(entry.title) === normalize(title));
         const row = {
+          id: same && same.id ? String(same.id) : catalogKey(),
           userId: id,
           category,
           title,
@@ -156,9 +162,8 @@ function createStore(dir) {
           recipe: item.recipe && typeof item.recipe === 'object' ? item.recipe : null,
           body: String(item.body || '').slice(0, 4000),
           source: item.source === 'own' ? 'own' : 'found',
-          createdAt: new Date().toISOString()
+          createdAt: same && same.createdAt ? same.createdAt : new Date().toISOString()
         };
-        const same = data.catalog.find(entry => entry.category === category && normalize(entry.title) === normalize(title));
         if (same) {
           Object.assign(same, row);
         } else {
@@ -184,12 +189,39 @@ function createStore(dir) {
     listCatalog() {
       return enqueue(async () => {
         const data = await load();
+        let dirty = false;
+        for (const entry of data.catalog) {
+          if (!entry.id) {
+            entry.id = catalogKey();
+            dirty = true;
+          }
+        }
+        if (dirty) await persist();
         return data.catalog.slice(-30).reverse().map(entry => ({
+          id: String(entry.id),
           category: entry.category,
           title: entry.title,
           query: entry.query,
           source: entry.source
         }));
+      });
+    },
+    getCatalog(id) {
+      return enqueue(async () => {
+        const key = String(id || '').replace(/[^\w-]/g, '').slice(0, 40);
+        if (!key) return null;
+        const data = await load();
+        const entry = data.catalog.find(row => String(row.id || '') === key);
+        if (!entry) return null;
+        return {
+          id: String(entry.id),
+          category: entry.category || '',
+          title: entry.title || '',
+          query: entry.query || '',
+          recipe: entry.recipe && typeof entry.recipe === 'object' ? entry.recipe : null,
+          body: entry.body || '',
+          source: entry.source || 'found'
+        };
       });
     },
     markShared(id, postId) {

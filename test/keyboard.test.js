@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { menuKeyboard, hubKeyboard, recipeKeyboard, servingsKeyboard, favoritesKeyboard } = require('../src/keyboard');
+const { menuKeyboard, hubKeyboard, recipeKeyboard, servingsKeyboard, favoritesKeyboard, catalogKeyboard } = require('../src/keyboard');
 const { sectionIds, sectionKeyboard } = require('../src/menu');
 
 function rows(raw) {
@@ -19,7 +19,8 @@ test('клавиатура ВК помещается в лимиты кнопо�
     hubKeyboard('morning'),
     hubKeyboard('sweetbox'),
     hubKeyboard('pick'),
-    hubKeyboard('mine')
+    hubKeyboard('mine'),
+    catalogKeyboard([{ id: '4', title: 'Очень длинное название домашнего блюда с грибами и сметаной' }])
   ].concat(sectionIds().map(sectionKeyboard).filter(Boolean));
   for (const raw of boards) {
     const buttons = rows(raw);

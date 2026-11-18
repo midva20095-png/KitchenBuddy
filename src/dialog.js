@@ -770,6 +770,13 @@ function turn(user, input, ctx) {
   if (payload && payload.a === 'choose') return chooseIdea(source, Number(payload.i));
   if (payload && payload.a === 'hub') return openHub(source, String(payload.h || ''));
   if (payload && payload.a === 'open') return openFavorite(source, Number(payload.i));
+  if (payload && payload.a === 'openbase') {
+    const id = String(payload.id || '').replace(/[^\w-]/g, '').slice(0, 40);
+    if (!id) {
+      return { user: source, messages: [say('Этот рецепт из базы не открылся. Напишите название.', hubKeyboard('mine') || menuKeyboard())], job: null };
+    }
+    return { user: source, messages: [], job: null, openCatalog: id };
+  }
   const hub = !payload && hubByText(text);
   if (hub) return openHub(source, hub);
   const action = actionOf(text, payload);
@@ -887,9 +894,10 @@ function complete(user, job, raw, ctx) {
 
 function fromCatalog(user, job, found, ctx) {
   const nextJob = job || { kind: 'dish', memory: found && found.title, prompt: '' };
+  const lead = nextJob.kind === 'catalog' ? '' : 'Нашла в базе.\n\n';
   if (found && found.recipe) {
     const done = complete(user, nextJob, JSON.stringify(found.recipe), Object.assign({}, ctx, { saved: true }));
-    if (done.messages[0]) done.messages[0].text = `Нашла в базе.\n\n${done.messages[0].text}`;
+    if (lead && done.messages[0]) done.messages[0].text = `${lead}${done.messages[0].text}`;
     if (found.category) done.user.lastCategory = found.category;
     done.recipe = true;
     return done;
@@ -901,7 +909,7 @@ function fromCatalog(user, job, found, ctx) {
   const body = String((found && found.body) || '').trim() || 'Рецепт в базе пустой. Напишите название ещё раз.';
   return {
     user: next,
-    messages: [{ text: shown(`Нашла в базе.\n\n${body}`, ctx, nextJob.memory), keyboard: menuKeyboard() }],
+    messages: [{ text: shown(`${lead}${body}`, ctx, nextJob.memory), keyboard: menuKeyboard() }],
     commentText: '',
     recipe: true
   };

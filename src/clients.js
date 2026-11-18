@@ -271,11 +271,23 @@ function createClients(connectionString, options) {
        FROM catalog_recipes ORDER BY id DESC LIMIT 30`
     );
     return result.rows.map(row => ({
+      id: row.id,
       category: row.category || '',
       title: row.title || '',
       query: row.query || '',
       source: row.source || 'found'
     }));
+  }
+
+  async function getCatalog(id) {
+    const key = String(id || '').replace(/\D/g, '');
+    if (!key) return null;
+    const result = await query(
+      `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+       FROM catalog_recipes WHERE id = $1`,
+      [key]
+    );
+    return result.rows[0] ? catalogRow(result.rows[0]) : null;
   }
 
   async function markShared(id, postId) {
@@ -434,6 +446,7 @@ function createClients(connectionString, options) {
     saveCatalog,
     findCatalog,
     listCatalog,
+    getCatalog,
     markShared,
     stats,
     listClients,

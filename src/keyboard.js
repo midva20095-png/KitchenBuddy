@@ -158,6 +158,15 @@ function stepsKeyboard(last) {
   ]);
 }
 
+function catalogKeyboard(rows) {
+  const list = (rows || []).filter(row => row && row.id).slice(0, 9);
+  const buttons = list.map(row => [
+    textButton(row.title || 'Рецепт', { a: 'openbase', id: String(row.id) }, 'primary')
+  ]);
+  buttons.push([textButton('В меню', { a: 'menu' }, 'secondary')]);
+  return board(buttons);
+}
+
 function favoritesKeyboard(list) {
   const rows = (list || []).slice(0, 5).map((item, index) => [
     textButton(`${index + 1}. ${item.title || 'Рецепт'}`, { a: 'open', i: index }, 'primary')
@@ -192,6 +201,7 @@ module.exports = {
   minutesKeyboard,
   dietKeyboard,
   stepsKeyboard,
+  catalogKeyboard,
   favoritesKeyboard,
   ideaKeyboard,
   backKeyboard

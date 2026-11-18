@@ -221,6 +221,7 @@ test('рецепт из базы находится только в своём �
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
   const store = createStore(dir);
   const sent = [];
+  const boards = [];
   let calls = 0;
   const bot = createBot({
     store,
@@ -235,7 +236,7 @@ test('рецепт из базы находится только в своём �
         return RECIPE;
       }
     },
-    send: async (peer, text) => { sent.push(text); },
+    send: async (peer, text, keyboard) => { sent.push(text); if (keyboard) boards.push(keyboard); },
     comment: async () => {},
     typing: async () => {}
   });
@@ -266,6 +267,14 @@ test('рецепт из базы находится только в своём �
 
   await bot.handle({ userId: '20', peerId: 20, text: 'моя база', place: 'dm', messageId: 8 });
   assert.match(sent.at(-1), /Борщ/);
+  assert.match(sent.at(-1), /кнопкой или напишите название/);
+  const open = JSON.parse(boards.at(-1)).buttons.flat()
+    .map(button => JSON.parse(button.action.payload))
+    .find(payload => payload.a === 'openbase');
+  assert.ok(open && open.id);
+  await bot.handle({ userId: '20', peerId: 20, text: 'Борщ', payload: open, place: 'dm', messageId: 11 });
+  assert.equal(calls, 1);
+  assert.match(sent.at(-1), /Сварите бульон/);
 
   await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'cake' }, place: 'dm', messageId: 9 });
   await bot.handle({ userId: '20', peerId: 20, text: 'медовик на 8', place: 'dm', messageId: 10 });

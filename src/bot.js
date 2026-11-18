@@ -1,7 +1,7 @@
 'use strict';
 
 const { blankUser, overLimit, turn, complete, fromCatalog, limitTurn } = require('./dialog');
-const { menuKeyboard, hubKeyboard } = require('./keyboard');
+const { menuKeyboard, hubKeyboard, catalogKeyboard } = require('./keyboard');
 const { formatCatalog } = require('./catalog');
 const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
@@ -313,13 +313,28 @@ function createBot(options) {
         console.error('Рецепт в базу не сохранился.');
       }
     }
+    if (result.openCatalog) {
+      let found = null;
+      if (store.getCatalog) {
+        try { found = await store.getCatalog(result.openCatalog); } catch (error) { found = null; }
+      }
+      if (!found) {
+        await keep(result.user);
+        return deliver(fresh.peerId, [{ text: 'Этого рецепта в базе уже нет. Откройте «Моя база» ещё раз или напишите название.', keyboard: hubKeyboard('mine') || menuKeyboard() }]);
+      }
+      const done = fromCatalog(result.user, { kind: 'catalog', memory: found.title || '', prompt: '', data: {} }, found, ctx);
+      await journal(userId, 'found', found.title || '');
+      await keep(done.user);
+      return deliver(fresh.peerId, done.messages);
+    }
     if (result.listCatalog) {
       let rows = [];
       if (store.listCatalog) {
         try { rows = await store.listCatalog(userId); } catch (error) { rows = []; }
       }
       await keep(result.user);
-      return deliver(fresh.peerId, [{ text: formatCatalog(rows), keyboard: hubKeyboard('mine') || menuKeyboard() }]);
+      const keyboard = rows.some(row => row && row.id) ? catalogKeyboard(rows) : (hubKeyboard('mine') || menuKeyboard());
+      return deliver(fresh.peerId, [{ text: formatCatalog(rows), keyboard }]);
     }
     if (!result.job) {
       await keep(result.user);
