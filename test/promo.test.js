@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { withPromo } = require('../src/promo');
-const { matchLesson, loadLessons, postsToLessons } = require('../src/lessons');
+const { matchLesson, loadLessons, postsToLessons, collectLessons } = require('../src/lessons');
 
 test('подпись проектов короткая и не двоится', () => {
   const text = withPromo('Рецепт борща.');
@@ -18,6 +18,10 @@ test('подпись проектов короткая и не двоится', 
   const withLesson = withPromo('Торт.', { lesson });
   assert.match(withLesson, /Смотрите также: мастер-класс «Медовик»/);
   assert.match(withLesson, /wall-2_2/);
+  const article = withPromo('Торт.', {
+    lesson: { title: 'Бисквит', url: 'https://vk.ru/@babyagaland-biskvit', kind: 'article' }
+  });
+  assert.match(article, /Смотрите также: статья «Бисквит»/);
 
   const long = withPromo('а'.repeat(600), { compact: true });
   assert.ok(long.length <= 500);
@@ -44,4 +48,45 @@ test('каталог второго сообщества советует тол
   assert.equal(fromWall[0].url, 'https://vk.ru/wall-213938339_9');
   assert.equal(fromWall[1].kind, 'recipe');
   assert.equal(matchLesson('медовик', fromWall).url, fromWall[0].url);
+
+  const catalog = collectLessons({
+    posts: [
+      {
+        id: 1,
+        text: 'ок',
+        attachments: [{
+          type: 'article',
+          article: {
+            id: 5,
+            owner_id: -213938339,
+            title: 'Сахарная Избушка',
+            subtitle: 'клуб кондитеров',
+            url: 'https://vk.com/@babyagaland-saharnaya-izbushka'
+          }
+        }]
+      },
+      { id: 2, donut: { is_donut: true }, text: 'Закрытый мастер-класс по медовику для своих.' }
+    ],
+    articles: [{ id: 6, owner_id: -213938339, title: 'Бисквит на желтках', url: 'https://vk.ru/@babyagaland-biskvit' }],
+    videos: [{ id: 7, owner_id: -213938339, title: 'Мастер-класс: муссовый торт', description: 'урок для кондитеров' }],
+    albums: [{ id: 8, owner_id: -213938339, title: 'Навигация по донам', description: 'альбом' }],
+    goods: [{ id: 9, title: 'Набор форм', description: 'для торта' }],
+    menu: [
+      { type: 'article', title: 'Сахарная Избушка', url: 'https://vk.ru/@babyagaland-saharnaya-izbushka' },
+      { type: 'app', title: 'Чужой бот', url: 'https://vk.ru/app1' }
+    ]
+  }, '213938339');
+  const byTitle = Object.fromEntries(catalog.map(item => [item.title, item]));
+  assert.equal(byTitle['Сахарная Избушка'].kind, 'article');
+  assert.equal(byTitle['Сахарная Избушка'].url, 'https://vk.ru/@babyagaland-saharnaya-izbushka');
+  assert.equal(catalog.filter(item => item.title === 'Сахарная Избушка').length, 1);
+  assert.equal(byTitle['Бисквит на желтках'].kind, 'article');
+  assert.equal(byTitle['Мастер-класс: муссовый торт'].kind, 'masterclass');
+  assert.equal(byTitle['Мастер-класс: муссовый торт'].url, 'https://vk.ru/video-213938339_7');
+  assert.equal(byTitle['Навигация по донам'].kind, 'album');
+  assert.equal(byTitle['Набор форм'].kind, 'material');
+  assert.equal(byTitle['Набор форм'].url, 'https://vk.ru/market-213938339?w=product-213938339_9');
+  assert.equal(catalog.some(item => /медовик/.test(item.title)), false);
+  assert.equal(catalog.some(item => item.url.includes('/app1')), false);
+  assert.equal(matchLesson('бисквит желтки', catalog).url, byTitle['Бисквит на желтках'].url);
 });

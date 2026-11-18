@@ -11,7 +11,15 @@ function promoFooter(options) {
   const lesson = options && options.lesson;
   const lines = [];
   if (lesson && lesson.url && lesson.title) {
-    const kind = lesson.kind === 'masterclass' ? 'мастер-класс' : 'рецепт';
+    const labels = {
+      masterclass: 'мастер-класс',
+      article: 'статья',
+      video: 'видео',
+      album: 'альбом',
+      material: 'материал',
+      recipe: 'рецепт'
+    };
+    const kind = labels[lesson.kind] || 'рецепт';
     lines.push(`Смотрите также: ${kind} «${String(lesson.title).trim()}»`);
     lines.push(String(lesson.url).trim());
     lines.push('');

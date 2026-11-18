@@ -47,39 +47,187 @@ function matchLesson(query, lessons) {
   return null;
 }
 
+function isClosed(post) {
+  return Boolean(post && post.donut && (post.donut.is_donut || post.donut.paid_duration));
+}
+
+function attachmentsOf(post) {
+  const found = [];
+  const groups = [post && post.attachments];
+  const copies = post && Array.isArray(post.copy_history) ? post.copy_history : [];
+  for (const copy of copies) {
+    if (copy && copy.text) found.push({ type: 'text', text: copy.text });
+    if (copy && Array.isArray(copy.attachments)) groups.push(copy.attachments);
+  }
+  for (const group of groups) {
+    if (Array.isArray(group)) found.push(...group);
+  }
+  return found;
+}
+
+function plain(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function kindOf(text, fallback) {
+  const source = String(text || '').toLowerCase();
+  if (/мастер|урок|обучен/.test(source)) return 'masterclass';
+  if (/стать/.test(source)) return 'article';
+  return fallback || 'recipe';
+}
+
+function clipTitle(title, extra) {
+  const raw = plain(title);
+  if (/^video by\b/i.test(raw) || raw.length < 4) return plain(extra).split(/[.!\n]/)[0].slice(0, 80);
+  return raw.slice(0, 80);
+}
+
+function vkUrl(url) {
+  return plain(url).replace(/^https?:\/\/(?:m\.)?vk\.com\//i, 'https://vk.ru/').split('?')[0];
+}
+
 function postWords(post) {
   const parts = [post && post.text];
-  const attachments = (post && post.attachments) || [];
-  for (const item of attachments) {
-    if (item && item.video && item.video.title) parts.push(item.video.title);
-    if (item && item.link && item.link.title) parts.push(item.link.title);
+  for (const item of attachmentsOf(post)) {
+    if (item.text) parts.push(item.text);
+    if (item.article) parts.push(item.article.title, item.article.subtitle);
+    if (item.video) parts.push(item.video.title, item.video.description);
+    if (item.link) parts.push(item.link.title, item.link.description);
+    if (item.photo && item.photo.text) parts.push(item.photo.text);
+    if (item.doc && item.doc.title) parts.push(item.doc.title);
   }
-  const copy = post && Array.isArray(post.copy_history) ? post.copy_history[0] : null;
-  if (copy && copy.text) parts.push(copy.text);
-  return parts.filter(Boolean).join('\n').replace(/\s+/g, ' ').trim();
+  return plain(parts.filter(Boolean).join(' '));
+}
+
+function remember(lessons, seenTitle, seenUrl, item) {
+  const title = clipTitle(item && item.title, item && item.keys);
+  const url = plain(item && item.url);
+  if (title.length < 4 || !/^https:\/\/vk\.ru\//.test(url)) return;
+  const titleKey = title.toLowerCase();
+  if (seenTitle.has(titleKey) || seenUrl.has(url)) return;
+  seenTitle.add(titleKey);
+  seenUrl.add(url);
+  lessons.push({
+    title,
+    url,
+    kind: item.kind || 'recipe',
+    keys: plain(item.keys || title).slice(0, 400)
+  });
 }
 
 function postsToLessons(posts, groupId) {
   const id = String(groupId || '').replace(/\D/g, '');
   if (!id) return [];
   const lessons = [];
-  const seen = new Set();
+  const seenTitle = new Set();
+  const seenUrl = new Set();
   for (const post of posts || []) {
-    if (!post || !post.id) continue;
+    if (!post || !post.id || isClosed(post)) continue;
+    const own = plain(post.text);
     const text = postWords(post);
-    if (text.length < 8) continue;
-    const title = text.split(/[.!\n]/)[0].trim().slice(0, 80);
-    if (title.length < 4 || seen.has(title.toLowerCase())) continue;
-    seen.add(title.toLowerCase());
-    const lesson = /мастер|урок|обучен/.test(text.toLowerCase());
-    lessons.push({
-      title,
-      url: `https://vk.ru/wall-${id}_${post.id}`,
-      kind: lesson ? 'masterclass' : 'recipe',
-      keys: text.slice(0, 400)
+    if (own.length >= 8) {
+      remember(lessons, seenTitle, seenUrl, {
+        title: own.split(/[.!\n]/)[0],
+        url: `https://vk.ru/wall-${id}_${post.id}`,
+        kind: kindOf(text, 'recipe'),
+        keys: text
+      });
+    }
+    for (const item of attachmentsOf(post)) {
+      if (item.article) {
+        const keys = plain(`${item.article.title || ''} ${item.article.subtitle || ''}`);
+        remember(lessons, seenTitle, seenUrl, {
+          title: item.article.title || item.article.subtitle,
+          url: vkUrl(item.article.view_url || item.article.url),
+          kind: kindOf(keys, 'article'),
+          keys
+        });
+      }
+      if (item.video && item.video.id != null && item.video.owner_id != null) {
+        const keys = plain(`${item.video.title || ''} ${item.video.description || ''}`);
+        remember(lessons, seenTitle, seenUrl, {
+          title: item.video.title,
+          url: `https://vk.ru/video${item.video.owner_id}_${item.video.id}`,
+          kind: kindOf(keys, 'video'),
+          keys
+        });
+      }
+      if (item.doc && item.doc.id != null && item.doc.owner_id != null && item.doc.title) {
+        remember(lessons, seenTitle, seenUrl, {
+          title: item.doc.title,
+          url: `https://vk.ru/doc${item.doc.owner_id}_${item.doc.id}`,
+          kind: kindOf(item.doc.title, 'material'),
+          keys: item.doc.title
+        });
+      }
+    }
+  }
+  return lessons;
+}
+
+const MENU_KIND = {
+  article: 'article',
+  video: 'video',
+  photo_album: 'album',
+  narrative: 'album',
+  post: 'recipe',
+  market: 'material'
+};
+
+function collectLessons(source, groupId) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (!id) return [];
+  const bundle = source || {};
+  const lessons = postsToLessons(bundle.posts, id);
+  const seenTitle = new Set(lessons.map(item => item.title.toLowerCase()));
+  const seenUrl = new Set(lessons.map(item => item.url));
+  for (const article of bundle.articles || []) {
+    const keys = plain(`${article.title || ''} ${article.subtitle || ''}`);
+    remember(lessons, seenTitle, seenUrl, {
+      title: article.title || article.subtitle,
+      url: vkUrl(article.view_url || article.url),
+      kind: kindOf(keys, 'article'),
+      keys
+    });
+  }
+  for (const video of bundle.videos || []) {
+    const keys = plain(`${video.title || ''} ${video.description || ''}`);
+    remember(lessons, seenTitle, seenUrl, {
+      title: video.title,
+      url: video.id != null && video.owner_id != null ? `https://vk.ru/video${video.owner_id}_${video.id}` : '',
+      kind: kindOf(keys, 'video'),
+      keys
+    });
+  }
+  for (const album of bundle.albums || []) {
+    const keys = plain(`${album.title || ''} ${album.description || ''}`);
+    remember(lessons, seenTitle, seenUrl, {
+      title: album.title,
+      url: album.id != null && album.owner_id != null ? `https://vk.ru/album${album.owner_id}_${album.id}` : '',
+      kind: kindOf(keys, 'album'),
+      keys
+    });
+  }
+  for (const item of bundle.goods || []) {
+    const keys = plain(`${item.title || ''} ${item.description || ''}`);
+    remember(lessons, seenTitle, seenUrl, {
+      title: item.title,
+      url: item.id != null ? `https://vk.ru/market-${id}?w=product-${id}_${item.id}` : '',
+      kind: kindOf(keys, 'material'),
+      keys
+    });
+  }
+  for (const item of bundle.menu || []) {
+    const fallback = MENU_KIND[item && item.type];
+    if (!fallback) continue;
+    remember(lessons, seenTitle, seenUrl, {
+      title: item.title,
+      url: vkUrl(item.url),
+      kind: kindOf(item.title, fallback),
+      keys: item.title
     });
   }
   return lessons;
 }
 
-module.exports = { loadLessons, matchLesson, postsToLessons };
+module.exports = { loadLessons, matchLesson, postsToLessons, collectLessons };

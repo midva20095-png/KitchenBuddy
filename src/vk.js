@@ -139,22 +139,54 @@ function createVk(options) {
       await this.call('messages.setActivity', { peer_id: String(peerId), type: 'typing' });
     },
 
-    async wallPosts(groupId) {
+    async ownedList(method, groupId, extra, step, cap) {
       const id = String(groupId || '').replace(/\D/g, '');
       if (!id) return [];
-      const posts = [];
-      for (const offset of [0, 100]) {
-        const response = await this.call('wall.get', {
+      const size = step || 100;
+      const limit = cap || 300;
+      const items = [];
+      for (let offset = 0; items.length < limit; offset += size) {
+        const response = await this.call(method, Object.assign({
           owner_id: `-${id}`,
-          count: '100',
-          offset: String(offset),
-          filter: 'owner'
-        });
-        const items = response && Array.isArray(response.items) ? response.items : [];
-        posts.push(...items);
-        if (items.length < 100) break;
+          count: String(size),
+          offset: String(offset)
+        }, extra || {}));
+        const page = response && Array.isArray(response.items) ? response.items : [];
+        items.push(...page);
+        const total = response && Number(response.count);
+        if (page.length < size) break;
+        if (Number.isFinite(total) && offset + page.length >= total) break;
       }
-      return posts;
+      return items.slice(0, limit);
+    },
+
+    async wallPosts(groupId) {
+      return this.ownedList('wall.get', groupId, { filter: 'owner' }, 100, 1200);
+    },
+
+    async articles(groupId) {
+      return this.ownedList('articles.getOwnerPublished', groupId, { sort_by: 'date' }, 30, 200);
+    },
+
+    async videos(groupId) {
+      return this.ownedList('video.get', groupId, {}, 100, 200);
+    },
+
+    async albums(groupId) {
+      return this.ownedList('photos.getAlbums', groupId, {}, 100, 100);
+    },
+
+    async goods(groupId) {
+      return this.ownedList('market.get', groupId, {}, 100, 200);
+    },
+
+    async groupMenu(groupId) {
+      const id = String(groupId || '').replace(/\D/g, '');
+      if (!id) return [];
+      const info = await this.call('groups.getById', { group_ids: id, fields: 'menu' });
+      const group = firstGroup(info);
+      const items = group && group.menu && Array.isArray(group.menu.items) ? group.menu.items : [];
+      return items;
     },
 
     async post(text) {

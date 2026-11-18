@@ -4,7 +4,7 @@ require('dotenv').config();
 
 const path = require('path');
 const { loadConfig } = require('./src/config');
-const { loadLessons, postsToLessons } = require('./src/lessons');
+const { loadLessons, collectLessons } = require('./src/lessons');
 const { createStore } = require('./src/store');
 const { createClients } = require('./src/clients');
 const { createGigaChat } = require('./src/gigachat');
@@ -25,21 +25,42 @@ const state = {
 
 const giga = createGigaChat({ env: process.env });
 const vk = config.token ? createVk({ token: config.token, groupId: config.groupId }) : null;
+const sourceVk = config.sourceToken
+  ? createVk({ token: config.sourceToken, groupId: config.sourceGroupId })
+  : vk;
 const fileLessons = loadLessons(path.join(config.dataDir, 'lessons.json'));
 const lessons = fileLessons.slice();
 
-async function refreshSource() {
-  if (!vk || !config.sourceGroupId) return;
+async function readPart(title, load) {
   try {
-    const posts = await vk.wallPosts(config.sourceGroupId);
-    const fresh = postsToLessons(posts, config.sourceGroupId);
-    const next = fileLessons.concat(fresh);
-    lessons.splice(0, lessons.length, ...next);
-    console.log(`Каталог «Баба Яга» ${config.sourceGroupId}: записей ${fresh.length}. В чат этого сообщества бот не подключается.`);
+    return await load();
   } catch (error) {
     const code = error && error.code ? ` (${error.code})` : '';
-    console.error(`Каталог «Баба Яга» не прочитался${code}. Бот в том сообществе не запускается.`);
+    console.error(`«Баба Яга», ${title} не прочитались${code}.`);
+    return [];
   }
+}
+
+let sourceHintShown = false;
+
+async function refreshSource() {
+  if (!sourceVk || !config.sourceGroupId) return;
+  const id = config.sourceGroupId;
+  if (!config.sourceToken && !sourceHintShown) {
+    sourceHintShown = true;
+    console.log('Ключ второго сообщества не задан (SOURCE_GROUP_TOKEN). Читаю материалы ключом KitchenBuddy. В чат «Баба Яга» бот не подключается.');
+  }
+  const [posts, articles, videos, albums, goods, menu] = await Promise.all([
+    readPart('стена', () => sourceVk.wallPosts(id)),
+    readPart('статьи', () => sourceVk.articles(id)),
+    readPart('видео', () => sourceVk.videos(id)),
+    readPart('альбомы', () => sourceVk.albums(id)),
+    readPart('товары', () => sourceVk.goods(id)),
+    readPart('меню', () => sourceVk.groupMenu(id))
+  ]);
+  const fresh = collectLessons({ posts, articles, videos, albums, goods, menu }, id);
+  lessons.splice(0, lessons.length, ...fileLessons.concat(fresh));
+  console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, статьи ${articles.length}, видео ${videos.length}, альбомы ${albums.length}, товары ${goods.length}. Платные записи не беру. В чат этого сообщества бот не подключается.`);
 }
 
 function sleep(ms) {

@@ -32,6 +32,8 @@ test('настройки читают числа и не тащат секрет
   assert.equal(config.sourceGroupId, '213938339');
   assert.equal(loadConfig({ SOURCE_GROUP_ID: 'club213938339' }).sourceGroupId, '213938339');
   assert.equal(loadConfig({ SOURCE_GROUP_ID: '0' }).sourceGroupId, '');
+  assert.equal(config.sourceTokenConfigured, false);
+  assert.equal(loadConfig({ SOURCE_GROUP_TOKEN: 'vk1.a.secret' }).sourceTokenConfigured, true);
   assert.equal(loadConfig({ SUBSCRIBERS_ONLY: '0' }).subscribersOnly, false);
   assert.equal(Object.hasOwn(config, 'gigaKey'), false);
   const broken = loadConfig({

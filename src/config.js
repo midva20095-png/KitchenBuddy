@@ -39,6 +39,8 @@ function loadConfig(env) {
     subscribersOnly: flag(source.SUBSCRIBERS_ONLY, true),
     aiParallel: Math.min(4, Math.max(1, Number(source.AI_PARALLEL) || 2)),
     sourceGroupId: sourceGroup(source.SOURCE_GROUP_ID),
+    sourceToken: String(source.SOURCE_GROUP_TOKEN || '').trim(),
+    sourceTokenConfigured: Boolean(String(source.SOURCE_GROUP_TOKEN || '').trim()),
     dataDir: path.resolve(String(source.DATA_DIR || path.join(process.cwd(), 'data'))),
     adminPassword: String(source.ADMIN_PASSWORD || '').trim()
   };
