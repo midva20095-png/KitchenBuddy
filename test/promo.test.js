@@ -22,6 +22,12 @@ test('подпись проектов короткая и не двоится', 
     lesson: { title: 'Бисквит', url: 'https://vk.ru/@babyagaland-biskvit', kind: 'article' }
   });
   assert.match(article, /Смотрите также: статья «Бисквит»/);
+  const paid = withPromo('Торт.', {
+    lesson: { title: 'Медовик', url: 'https://vk.ru/wall-213938339_2', kind: 'paid' }
+  });
+  assert.match(paid, /Смотрите также: платный урок «Медовик»/);
+  assert.match(paid, /по подписке в сообществе «Баба Яга»/);
+  assert.doesNotMatch(paid, /коржи/);
 
   const long = withPromo('а'.repeat(600), { compact: true });
   assert.ok(long.length <= 500);
@@ -65,7 +71,13 @@ test('каталог второго сообщества советует тол
           }
         }]
       },
-      { id: 2, donut: { is_donut: true }, text: 'Закрытый мастер-класс по медовику для своих.' }
+      { id: 2, donut: { is_donut: true }, text: 'Закрытый мастер-класс по медовику для своих. Секретные коржи и крем.' },
+      {
+        id: 3,
+        donut: { is_donut: true },
+        text: 'урок',
+        attachments: [{ type: 'video', video: { id: 4, owner_id: -213938339, title: 'Наполеон закрытый урок', description: 'коржи' } }]
+      }
     ],
     articles: [{ id: 6, owner_id: -213938339, title: 'Бисквит на желтках', url: 'https://vk.ru/@babyagaland-biskvit' }],
     videos: [{ id: 7, owner_id: -213938339, title: 'Мастер-класс: муссовый торт', description: 'урок для кондитеров' }],
@@ -86,7 +98,13 @@ test('каталог второго сообщества советует тол
   assert.equal(byTitle['Навигация по донам'].kind, 'album');
   assert.equal(byTitle['Набор форм'].kind, 'material');
   assert.equal(byTitle['Набор форм'].url, 'https://vk.ru/market-213938339?w=product-213938339_9');
-  assert.equal(catalog.some(item => /медовик/.test(item.title)), false);
+  assert.equal(byTitle['Закрытый мастер-класс по медовику для своих'].kind, 'paid');
+  assert.equal(byTitle['Закрытый мастер-класс по медовику для своих'].url, 'https://vk.ru/wall-213938339_2');
+  assert.equal(byTitle['Наполеон закрытый урок'].kind, 'paid');
+  assert.equal(byTitle['Наполеон закрытый урок'].url, 'https://vk.ru/wall-213938339_3');
+  assert.equal(catalog.some(item => item.url.includes('video-213938339_4')), false);
+  assert.equal(catalog.some(item => /Секретные коржи/.test(item.title)), false);
+  assert.equal(matchLesson('медовик', catalog).kind, 'paid');
   assert.equal(catalog.some(item => item.url.includes('/app1')), false);
   assert.equal(matchLesson('бисквит желтки', catalog).url, byTitle['Бисквит на желтках'].url);
 });

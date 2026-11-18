@@ -37,7 +37,8 @@ function matchLesson(query, lessons) {
       n += 1;
       if (word.length > long) long = word.length;
     }
-    if (n > score || (n === score && long > longest)) {
+    const paidTie = n === score && n > 0 && long === longest && lesson.kind === 'paid' && (!best || best.kind !== 'paid');
+    if (n > score || (n === score && long > longest) || paidTie) {
       score = n;
       longest = long;
       best = lesson;
@@ -47,7 +48,7 @@ function matchLesson(query, lessons) {
   return null;
 }
 
-function isClosed(post) {
+function isDonut(post) {
   return Boolean(post && post.donut && (post.donut.is_donut || post.donut.paid_duration));
 }
 
@@ -122,9 +123,28 @@ function postsToLessons(posts, groupId) {
   const seenTitle = new Set();
   const seenUrl = new Set();
   for (const post of posts || []) {
-    if (!post || !post.id || isClosed(post)) continue;
+    if (!post || !post.id) continue;
     const own = plain(post.text);
     const text = postWords(post);
+    if (isDonut(post)) {
+      let title = own.length >= 8 ? own.split(/[.!\n]/)[0] : '';
+      if (!title) {
+        for (const item of attachmentsOf(post)) {
+          const named = (item.video && item.video.title) || (item.article && (item.article.title || item.article.subtitle)) || (item.doc && item.doc.title);
+          if (named && plain(named).length >= 4 && !/^video by\b/i.test(named)) {
+            title = named;
+            break;
+          }
+        }
+      }
+      remember(lessons, seenTitle, seenUrl, {
+        title: title || text,
+        url: `https://vk.ru/wall-${id}_${post.id}`,
+        kind: 'paid',
+        keys: text
+      });
+      continue;
+    }
     if (own.length >= 8) {
       remember(lessons, seenTitle, seenUrl, {
         title: own.split(/[.!\n]/)[0],

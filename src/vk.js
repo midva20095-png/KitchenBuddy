@@ -164,6 +164,10 @@ function createVk(options) {
       return this.ownedList('wall.get', groupId, { filter: 'owner' }, 100, 1200);
     },
 
+    async donutPosts(groupId) {
+      return this.ownedList('wall.get', groupId, { filter: 'donut' }, 100, 300);
+    },
+
     async articles(groupId) {
       return this.ownedList('articles.getOwnerPublished', groupId, { sort_by: 'date' }, 30, 200);
     },

@@ -17,11 +17,13 @@ function promoFooter(options) {
       video: 'видео',
       album: 'альбом',
       material: 'материал',
-      recipe: 'рецепт'
+      recipe: 'рецепт',
+      paid: 'платный урок'
     };
     const kind = labels[lesson.kind] || 'рецепт';
     lines.push(`Смотрите также: ${kind} «${String(lesson.title).trim()}»`);
     lines.push(String(lesson.url).trim());
+    if (lesson.kind === 'paid') lines.push('Открывается по подписке в сообществе «Баба Яга».');
     lines.push('');
   }
   lines.push('Мои проекты:');

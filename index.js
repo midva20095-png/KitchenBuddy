@@ -50,17 +50,18 @@ async function refreshSource() {
     sourceHintShown = true;
     console.log('Ключ второго сообщества не задан (SOURCE_GROUP_TOKEN). Читаю материалы ключом KitchenBuddy. В чат «Баба Яга» бот не подключается.');
   }
-  const [posts, articles, videos, albums, goods, menu] = await Promise.all([
+  const [posts, donut, articles, videos, albums, goods, menu] = await Promise.all([
     readPart('стена', () => sourceVk.wallPosts(id)),
+    readPart('платные записи', () => sourceVk.donutPosts(id)),
     readPart('статьи', () => sourceVk.articles(id)),
     readPart('видео', () => sourceVk.videos(id)),
     readPart('альбомы', () => sourceVk.albums(id)),
     readPart('товары', () => sourceVk.goods(id)),
     readPart('меню', () => sourceVk.groupMenu(id))
   ]);
-  const fresh = collectLessons({ posts, articles, videos, albums, goods, menu }, id);
+  const fresh = collectLessons({ posts: posts.concat(donut), articles, videos, albums, goods, menu }, id);
   lessons.splice(0, lessons.length, ...fileLessons.concat(fresh));
-  console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, статьи ${articles.length}, видео ${videos.length}, альбомы ${albums.length}, товары ${goods.length}. Платные записи не беру. В чат этого сообщества бот не подключается.`);
+  console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, платные ${donut.length}, статьи ${articles.length}, видео ${videos.length}, альбомы ${albums.length}, товары ${goods.length}. В чат этого сообщества бот не подключается.`);
 }
 
 function sleep(ms) {
