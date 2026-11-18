@@ -212,6 +212,7 @@ test('неподписчику в личке уходит ссылка, бесе
   await bot.handle({ userId: '12', peerId: 12, text: 'борщ на 4', place: 'dm', messageId: 1 });
   assert.equal(prompts.length, 0);
   assert.match(sent.at(-1).text, /подписчик/);
+  assert.equal((await store.listClients('12'))[0].member, false);
   assert.match(sent.at(-1).text, /club243405772/);
   await bot.handle({ userId: '12', peerId: 2000000002, text: 'привет', place: 'chat', messageId: 2 });
   assert.equal(sent.length, 1);

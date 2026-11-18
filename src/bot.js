@@ -225,13 +225,22 @@ function createBot(options) {
     return slot(() => giga.complete({ system, history, prompt }));
   }
 
-  async function subscriber(userId) {
-    if (!config.subscribersOnly || !memberOf) return true;
+  async function membership(userId) {
+    if (!memberOf) return null;
     try {
-      return await memberOf(userId);
+      return Boolean(await memberOf(userId));
     } catch (error) {
       console.error('ВК: подписку не проверила, отвечаю как обычно.');
-      return true;
+      return null;
+    }
+  }
+
+  async function rememberVisit(userId, member) {
+    if (!store.markVisit || (member !== true && member !== false)) return;
+    try {
+      await store.markVisit(userId, member);
+    } catch (error) {
+      console.error('Заход в бота не записался.');
     }
   }
 
@@ -300,7 +309,9 @@ function createBot(options) {
       user = null;
     }
     if (!user) user = blankUser(userId);
-    if (!(await subscriber(userId))) {
+    const member = await membership(userId);
+    await rememberVisit(userId, member);
+    if (config.subscribersOnly && member === false) {
       const peek = turn(user, fresh, ctx);
       if (peek.ignore) return [];
       await openClient(userId);

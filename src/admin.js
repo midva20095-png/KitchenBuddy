@@ -111,6 +111,11 @@ const PAGE = `<!doctype html>
     <div class="row"><button type="button" class="ghost" id="out">Выйти</button><button type="button" id="install2">Поставить на Android</button></div>
     <div class="card"><h2>Сводка</h2><div class="grid" id="stats"></div><p class="note" id="engine"></p></div>
     <div class="card">
+      <h2>Кто зашёл</h2>
+      <p class="note">Рецепты открываются только подписчикам сообщества. Без подписки человек остаётся в этом списке и получает ссылку, чтобы вступить. Если ВК не ответил на проверку, бот не закрывает дверь.</p>
+      <div class="wrap"><table><thead><tr><th>Человек</th><th>Зашёл</th><th>Был</th><th>Подписка</th></tr></thead><tbody id="visits"></tbody></table></div>
+    </div>
+    <div class="card">
       <h2>Чёрный список</h2>
       <div class="row">
         <input id="userId" inputmode="numeric" placeholder="id ВК">
@@ -175,13 +180,16 @@ const PAGE = `<!doctype html>
         ['Клиенты', stats.clients],
         ['Сегодня', stats.newDay],
         ['Были сегодня', stats.activeDay],
+        ['Подписчики', stats.members || 0],
+        ['Без подписки', stats.guests || 0],
         ['Рецепты', stats.recipes],
         ['Поделились', stats.shared],
         ['В ЧС', stats.blocked]
       ];
       $('stats').innerHTML = cells.map(item => '<div class="stat"><b>' + item[1] + '</b>' + item[0] + '</div>').join('');
-      $('engine').textContent = stats.engine === 'postgres' ? 'Память: PostgreSQL.' : 'Память: файл на сервере. Чтобы карточки переживали деплой, соедините Postgres и переменную DATABASE_URL.';
+      $('engine').textContent = stats.engine === 'postgres' ? 'Память: PostgreSQL. Рецепты только подписчикам.' : 'Память: файл на сервере. Рецепты только подписчикам.';
       await search();
+      await visits();
       const catalog = await api('/api/admin/catalog');
       const lines = [];
       for (const row of catalog.rows || []) {
@@ -197,6 +205,15 @@ const PAGE = `<!doctype html>
       $('base').innerHTML = lines.join('') || '<tr><td colspan="4">В общей базе пока пусто.</td></tr>';
       const shared = await api('/api/admin/shared');
       $('shared').innerHTML = (shared.rows || []).map(row => '<tr><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.name || row.userId) + '</td><td>' + (row.status === 'posted' ? 'на стене' : 'сохранено') + '</td></tr>').join('') || '<tr><td colspan="3">Пока никто не делился.</td></tr>';
+    }
+    function subText(member) {
+      if (member === true) return 'подписчик';
+      if (member === false) return 'без подписки';
+      return 'не проверена';
+    }
+    async function visits() {
+      const data = await api('/api/admin/clients?q=');
+      $('visits').innerHTML = (data.rows || []).map(row => '<tr><td><a href="#" data-id="' + row.userId + '">' + escapeHtml(row.name || row.username || row.userId) + '</a>' + (row.blocked ? ' · в ЧС' : '') + '</td><td>' + when(row.createdAt) + '</td><td>' + when(row.lastSeen) + '</td><td>' + subText(row.member) + '</td></tr>').join('') || '<tr><td colspan="4">Пока никто не заходил.</td></tr>';
     }
     async function search() {
       const data = await api('/api/admin/clients?q=' + encodeURIComponent($('q').value || ''));
@@ -282,6 +299,12 @@ const PAGE = `<!doctype html>
     $('addBan').onclick = () => addBan().catch(error => { $('userMsg').textContent = error.message; });
     $('saveRecipe').onclick = () => saveRecipe().catch(error => { $('recipeMsg').textContent = error.message; });
     $('out').onclick = () => { sessionStorage.removeItem('kb_admin'); location.reload(); };
+    $('visits').onclick = event => {
+      const link = event.target.closest('[data-id]');
+      if (!link) return;
+      event.preventDefault();
+      openCard(link.getAttribute('data-id')).catch(error => alert(error.message));
+    };
     $('people').onclick = event => {
       const link = event.target.closest('[data-id]');
       if (!link) return;

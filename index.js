@@ -81,7 +81,7 @@ function startBot(store) {
     config,
     lessons,
     profile: vk ? userId => vk.profile(userId) : null,
-    member: vk && config.subscribersOnly ? userId => vk.isMember(userId) : null,
+    member: vk ? userId => vk.isMember(userId) : null,
     send: (peer, text, keyboard, photo) => (vk ? vk.send(peer, text, keyboard, photo) : Promise.resolve()),
     comment: (input, text) => (vk ? vk.comment(input, text) : Promise.resolve()),
     post: text => (vk ? vk.post(text) : Promise.reject(new Error('no-vk'))),

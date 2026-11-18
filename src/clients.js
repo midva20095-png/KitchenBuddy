@@ -62,6 +62,7 @@ const SCHEMA = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `CREATE INDEX IF NOT EXISTS catalog_user_idx ON catalog_recipes (user_id, id DESC)`,
+  `ALTER TABLE clients ADD COLUMN IF NOT EXISTS member BOOLEAN`,
   `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo BYTEA`,
   `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT ''`
 ];
@@ -337,6 +338,8 @@ function createClients(connectionString, options) {
         (SELECT COUNT(*)::int FROM clients WHERE last_seen >= NOW() - INTERVAL '1 day') AS active_day,
         (SELECT COUNT(*)::int FROM clients WHERE created_at >= NOW() - INTERVAL '1 day') AS new_day,
         (SELECT COUNT(*)::int FROM clients WHERE blocked) AS blocked,
+        (SELECT COUNT(*)::int FROM clients WHERE member IS TRUE) AS members,
+        (SELECT COUNT(*)::int FROM clients WHERE member IS FALSE) AS guests,
         (SELECT COALESCE(SUM(recipes), 0)::int FROM clients) AS recipes,
         (SELECT COUNT(*)::int FROM shared_recipes) AS shared
     `);
@@ -346,6 +349,8 @@ function createClients(connectionString, options) {
       activeDay: row.active_day || 0,
       newDay: row.new_day || 0,
       blocked: row.blocked || 0,
+      members: row.members || 0,
+      guests: row.guests || 0,
       recipes: row.recipes || 0,
       shared: row.shared || 0,
       engine: 'postgres'
@@ -355,7 +360,7 @@ function createClients(connectionString, options) {
   async function listClients(search) {
     const result = await query(
       `SELECT user_id::text AS user_id, COALESCE(name, '') AS name, COALESCE(username, '') AS username,
-              blocked, messages, recipes, created_at, last_seen
+              blocked, member, messages, recipes, created_at, last_seen
        FROM clients
        WHERE user_id::text ILIKE $1 OR COALESCE(name, '') ILIKE $1 OR COALESCE(username, '') ILIKE $1
        ORDER BY last_seen DESC
@@ -367,6 +372,7 @@ function createClients(connectionString, options) {
       name: row.name,
       username: row.username,
       blocked: Boolean(row.blocked),
+      member: row.member === true ? true : row.member === false ? false : null,
       messages: row.messages,
       recipes: row.recipes,
       createdAt: row.created_at,
@@ -426,6 +432,17 @@ function createClients(connectionString, options) {
         createdAt: item.created_at
       }))
     };
+  }
+
+  async function markVisit(userId, member) {
+    const id = cleanId(userId);
+    if (!id || (member !== true && member !== false)) return;
+    await query(
+      `INSERT INTO clients (user_id, member, messages)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (user_id) DO UPDATE SET member = EXCLUDED.member, updated_at = NOW()`,
+      [id, member]
+    );
   }
 
   async function setBlocked(userId, blocked) {
@@ -492,6 +509,7 @@ function createClients(connectionString, options) {
     markShared,
     stats,
     listClients,
+    markVisit,
     clientCard,
     setBlocked,
     listShared

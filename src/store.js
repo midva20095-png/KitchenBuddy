@@ -93,6 +93,7 @@ function createStore(dir) {
             username: '',
             photo: '',
             blocked: false,
+            member: null,
             messages: 0,
             recipes: 0,
             groupId: '',
@@ -272,6 +273,8 @@ function createStore(dir) {
           activeDay: cards.filter(item => String(item.lastSeen || '').slice(0, 10) === day).length,
           newDay: cards.filter(item => String(item.createdAt || '').slice(0, 10) === day).length,
           blocked: cards.filter(item => item.blocked).length,
+          members: cards.filter(item => item.member === true).length,
+          guests: cards.filter(item => item.member === false).length,
           recipes: cards.reduce((sum, item) => sum + (item.recipes || 0), 0),
           shared: data.shared.length,
           engine: 'file'
@@ -291,6 +294,7 @@ function createStore(dir) {
             name: item.name || '',
             username: item.username || '',
             blocked: Boolean(item.blocked),
+            member: item.member === true ? true : item.member === false ? false : null,
             messages: item.messages || 0,
             recipes: item.recipes || 0,
             createdAt: item.createdAt,
@@ -325,6 +329,33 @@ function createStore(dir) {
         };
       });
     },
+    markVisit(userId, member) {
+      const id = String(userId || '').replace(/\D/g, '');
+      return enqueue(async () => {
+        if (!id || (member !== true && member !== false)) return;
+        const data = await load();
+        const now = new Date().toISOString();
+        if (!data.cards[id]) {
+          data.cards[id] = {
+            userId: id,
+            name: '',
+            username: '',
+            photo: '',
+            blocked: false,
+            member,
+            messages: 0,
+            recipes: 0,
+            groupId: '',
+            createdAt: now,
+            lastSeen: now,
+            log: []
+          };
+        } else {
+          data.cards[id].member = member;
+        }
+        await persist();
+      });
+    },
     setBlocked(userId, blocked) {
       const id = String(userId || '').replace(/\D/g, '');
       return enqueue(async () => {
@@ -340,6 +371,7 @@ function createStore(dir) {
             username: '',
             photo: '',
             blocked: true,
+            member: null,
             messages: 0,
             recipes: 0,
             groupId: '',

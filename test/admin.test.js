@@ -114,7 +114,11 @@ test('админка показывает клиентов и не отдаёт 
     assert.equal(JSON.parse(shared.body).rows[0].title, 'Сырники');
     const block = await call(port, 'POST', '/api/admin/block', { userId: '15', blocked: true }, token);
     assert.equal(JSON.parse(block.body).blocked, true);
+    assert.match(admin.body, /Кто зашёл/);
     assert.match(admin.body, /В чёрный список/);
+    await store.markVisit('15', true);
+    const visits = await call(port, 'GET', '/api/admin/clients?q=', null, token);
+    assert.equal(JSON.parse(visits.body).rows.find(row => row.userId === '15').member, true);
     assert.doesNotMatch(admin.body, /Добавить человека/);
     assert.match(admin.body, /Рецепт с фото/);
     const ban = await call(port, 'POST', '/api/admin/block', { userId: '7777', blocked: true }, token);
