@@ -36,11 +36,12 @@ function uploadFields(raw) {
 
 function failText(error) {
   const code = Number(error && (error.code || error.error_code || error.vkCode));
-  if (code === 15 || code === 27 || code === 28) {
-    return 'Ключ сообщений не ставит эту кнопку. Откройте мини-приложение KitchenBuddy из сообщества на компьютере и нажмите «Поставить на страницу».';
+  const note = code ? ` ВК ответил ${code}.` : '';
+  if (code === 5 || code === 7 || code === 15 || code === 27 || code === 28) {
+    return `Ключ кнопки не подходит.${note} Откройте мини-приложение KitchenBuddy из сообщества на компьютере и нажмите «Поставить на страницу».`;
   }
-  if (code === 100 || code === 129) return 'ВК не принял картинку или ссылку кнопки.';
-  return 'Кнопку «Поиск рецептов» не удалось поставить.';
+  if (code === 100 || code === 129) return `ВК не принял картинку или ссылку кнопки.${note}`;
+  return `Кнопку «Поиск рецептов» не удалось поставить.${note}`;
 }
 
 async function uploadCover(token, jpeg) {
@@ -56,8 +57,18 @@ async function uploadCover(token, jpeg) {
   }
   const form = new FormData();
   form.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'cover.jpg');
-  const uploaded = await fetch(uploadUrl, { method: 'POST', body: form });
-  const fields = uploadFields(await uploaded.text());
+  const uploaded = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${access}` },
+    body: form
+  });
+  const raw = await uploaded.text();
+  const fields = uploadFields(raw);
+  if (!fields.hash && !fields.image) {
+    const error = new Error('ВК не принял картинку кнопки.');
+    error.code = uploaded.status;
+    throw error;
+  }
   const save = new URLSearchParams({
     access_token: access,
     v: '5.199',
@@ -119,4 +130,4 @@ async function placeSearchButton(vk) {
   return pinSearchButton(token, groupId);
 }
 
-module.exports = { chatLink, widgetCode, uploadFields, placeSearchButton, pinSearchButton, failText };
+module.exports = { chatLink, widgetCode, uploadFields, uploadCover, placeSearchButton, pinSearchButton, failText };
