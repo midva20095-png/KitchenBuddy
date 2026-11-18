@@ -164,6 +164,10 @@ function createStore(dir) {
           source: item.source === 'own' ? 'own' : 'found',
           createdAt: same && same.createdAt ? same.createdAt : new Date().toISOString()
         };
+        if (item.photo && item.photo.bytes && item.photo.bytes.length) {
+          row.photo = Buffer.from(item.photo.bytes).toString('base64');
+          row.photoType = String(item.photo.mime || 'image/jpeg').slice(0, 40);
+        }
         if (same) {
           Object.assign(same, row);
         } else {
@@ -171,7 +175,7 @@ function createStore(dir) {
         }
         if (data.catalog.length > 2000) data.catalog.splice(0, data.catalog.length - 2000);
         await persist();
-        return { title: row.title };
+        return { id: row.id, title: row.title };
       });
     },
     findCatalog(userId, query) {
@@ -182,7 +186,17 @@ function createStore(dir) {
         const rows = data.catalog
           .filter(entry => !category || family.has(entry.category))
           .slice(-500)
-          .reverse();
+          .reverse()
+          .map(entry => ({
+            id: String(entry.id || ''),
+            category: entry.category || '',
+            title: entry.title || '',
+            query: entry.query || '',
+            recipe: entry.recipe && typeof entry.recipe === 'object' ? entry.recipe : null,
+            body: entry.body || '',
+            source: entry.source || 'found',
+            hasPhoto: Boolean(entry.photo)
+          }));
         return matchCatalog(rows, query);
       });
     },
@@ -202,7 +216,8 @@ function createStore(dir) {
           category: entry.category,
           title: entry.title,
           query: entry.query,
-          source: entry.source
+          source: entry.source,
+          hasPhoto: Boolean(entry.photo)
         }));
       });
     },
@@ -220,8 +235,21 @@ function createStore(dir) {
           query: entry.query || '',
           recipe: entry.recipe && typeof entry.recipe === 'object' ? entry.recipe : null,
           body: entry.body || '',
-          source: entry.source || 'found'
+          source: entry.source || 'found',
+          hasPhoto: Boolean(entry.photo)
         };
+      });
+    },
+    catalogPhoto(id) {
+      return enqueue(async () => {
+        const key = String(id || '').replace(/[^\w-]/g, '').slice(0, 40);
+        if (!key) return null;
+        const data = await load();
+        const entry = data.catalog.find(row => String(row.id || '') === key);
+        if (!entry || !entry.photo) return null;
+        const bytes = Buffer.from(String(entry.photo), 'base64');
+        if (!bytes.length) return null;
+        return { mime: entry.photoType || 'image/jpeg', bytes };
       });
     },
     markShared(id, postId) {

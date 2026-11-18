@@ -61,7 +61,9 @@ const SCHEMA = [
     source TEXT NOT NULL DEFAULT 'found',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
-  `CREATE INDEX IF NOT EXISTS catalog_user_idx ON catalog_recipes (user_id, id DESC)`
+  `CREATE INDEX IF NOT EXISTS catalog_user_idx ON catalog_recipes (user_id, id DESC)`,
+  `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo BYTEA`,
+  `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT ''`
 ];
 
 function poolConfig(connectionString) {
@@ -214,7 +216,8 @@ function createClients(connectionString, options) {
       query: row.query || '',
       recipe: row.recipe && typeof row.recipe === 'object' ? row.recipe : null,
       body: row.body || '',
-      source: row.source || 'found'
+      source: row.source || 'found',
+      hasPhoto: Boolean(row.has_photo)
     };
   }
 
@@ -227,6 +230,8 @@ function createClients(connectionString, options) {
     const body = String(item.body || '').slice(0, 4000);
     const source = item.source === 'own' ? 'own' : 'found';
     const recipe = item.recipe && typeof item.recipe === 'object' ? JSON.stringify(item.recipe) : null;
+    const photo = item.photo && item.photo.bytes && item.photo.bytes.length ? Buffer.from(item.photo.bytes) : null;
+    const photoType = photo ? String(item.photo.mime || 'image/jpeg').slice(0, 40) : '';
     const existing = await query(
       `SELECT id FROM catalog_recipes
        WHERE category = $1 AND lower(title) = lower($2)
@@ -234,17 +239,24 @@ function createClients(connectionString, options) {
       [category, title]
     );
     if (existing.rows[0]) {
-      await query(
-        `UPDATE catalog_recipes SET query = $2, recipe = $3::jsonb, body = $4, source = $5 WHERE id = $1`,
-        [existing.rows[0].id, queryText, recipe, body, source]
-      );
+      if (photo) {
+        await query(
+          `UPDATE catalog_recipes SET query = $2, recipe = $3::jsonb, body = $4, source = $5, photo = $6, photo_type = $7 WHERE id = $1`,
+          [existing.rows[0].id, queryText, recipe, body, source, photo, photoType]
+        );
+      } else {
+        await query(
+          `UPDATE catalog_recipes SET query = $2, recipe = $3::jsonb, body = $4, source = $5 WHERE id = $1`,
+          [existing.rows[0].id, queryText, recipe, body, source]
+        );
+      }
       return { id: String(existing.rows[0].id) };
     }
     const inserted = await query(
-      `INSERT INTO catalog_recipes (user_id, category, title, query, recipe, body, source)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+      `INSERT INTO catalog_recipes (user_id, category, title, query, recipe, body, source, photo, photo_type)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
        RETURNING id`,
-      [id, category, title, queryText, recipe, body, source]
+      [id, category, title, queryText, recipe, body, source, photo, photoType]
     );
     return { id: inserted.rows[0] ? String(inserted.rows[0].id) : '' };
   }
@@ -254,12 +266,14 @@ function createClients(connectionString, options) {
     const family = familyIds(category);
     const result = family.length
       ? await query(
-        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source,
+                (photo IS NOT NULL AND octet_length(photo) > 0) AS has_photo
          FROM catalog_recipes WHERE category = ANY($1::text[]) ORDER BY id DESC LIMIT 500`,
         [family]
       )
       : await query(
-        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+        `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source,
+                (photo IS NOT NULL AND octet_length(photo) > 0) AS has_photo
          FROM catalog_recipes ORDER BY id DESC LIMIT 500`
       );
     return matchCatalog(result.rows.map(catalogRow), lookup);
@@ -267,7 +281,8 @@ function createClients(connectionString, options) {
 
   async function listCatalog() {
     const result = await query(
-      `SELECT id::text AS id, category, title, query, source
+      `SELECT id::text AS id, category, title, query, source,
+              (photo IS NOT NULL AND octet_length(photo) > 0) AS has_photo
        FROM catalog_recipes ORDER BY id DESC LIMIT 30`
     );
     return result.rows.map(row => ({
@@ -275,15 +290,31 @@ function createClients(connectionString, options) {
       category: row.category || '',
       title: row.title || '',
       query: row.query || '',
-      source: row.source || 'found'
+      source: row.source || 'found',
+      hasPhoto: Boolean(row.has_photo)
     }));
+  }
+
+  async function catalogPhoto(id) {
+    const key = String(id || '').replace(/\D/g, '');
+    if (!key) return null;
+    const result = await query(
+      `SELECT photo, COALESCE(photo_type, '') AS photo_type FROM catalog_recipes WHERE id = $1`,
+      [key]
+    );
+    const row = result.rows[0];
+    if (!row || !row.photo) return null;
+    const bytes = Buffer.isBuffer(row.photo) ? row.photo : Buffer.from(row.photo);
+    if (!bytes.length) return null;
+    return { mime: row.photo_type || 'image/jpeg', bytes };
   }
 
   async function getCatalog(id) {
     const key = String(id || '').replace(/\D/g, '');
     if (!key) return null;
     const result = await query(
-      `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source
+      `SELECT id::text AS id, category, title, query, recipe, COALESCE(body, '') AS body, source,
+              (photo IS NOT NULL AND octet_length(photo) > 0) AS has_photo
        FROM catalog_recipes WHERE id = $1`,
       [key]
     );
@@ -447,6 +478,7 @@ function createClients(connectionString, options) {
     findCatalog,
     listCatalog,
     getCatalog,
+    catalogPhoto,
     markShared,
     stats,
     listClients,

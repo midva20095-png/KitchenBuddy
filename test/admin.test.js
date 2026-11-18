@@ -9,6 +9,28 @@ const path = require('path');
 const { startServer } = require('../src/server');
 const { createStore } = require('../src/store');
 
+function callRaw(port, urlPath, body, type, token, method) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      port,
+      path: urlPath,
+      method: method || 'POST',
+      headers: {
+        'content-type': type || 'application/octet-stream',
+        'content-length': body ? body.length : 0,
+        authorization: token ? `Bearer ${token}` : ''
+      }
+    }, res => {
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
 function call(port, method, urlPath, body, token) {
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -92,6 +114,35 @@ test('админка показывает клиентов и не отдаёт 
     assert.equal(JSON.parse(shared.body).rows[0].title, 'Сырники');
     const block = await call(port, 'POST', '/api/admin/block', { userId: '15', blocked: true }, token);
     assert.equal(JSON.parse(block.body).blocked, true);
+    assert.match(admin.body, /Добавить человека/);
+    assert.match(admin.body, /Рецепт с фото/);
+    const added = await call(port, 'POST', '/api/admin/user', { userId: '4242', name: 'Олег' }, token);
+    assert.equal(added.status, 200);
+    const foundUser = await call(port, 'GET', '/api/admin/clients?q=' + encodeURIComponent('олег'), null, token);
+    assert.equal(JSON.parse(foundUser.body).rows[0].name, 'Олег');
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const boundary = 'kbBound';
+    const raw = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="title"\r\n\r\nБорщ с фото\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="category"\r\n\r\nsoup\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="body"\r\n\r\nСвекла и бульон\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="a.png"\r\nContent-Type: image/png\r\n\r\n`),
+      png,
+      Buffer.from(`\r\n--${boundary}--\r\n`)
+    ]);
+    const uploaded = await callRaw(port, '/api/admin/recipe', raw, `multipart/form-data; boundary=${boundary}`, token);
+    assert.equal(uploaded.status, 200);
+    const again = JSON.parse((await call(port, 'GET', '/api/admin/catalog', null, token)).body);
+    const row = again.rows.find(item => item.title === 'Борщ с фото');
+    assert.equal(row.hasPhoto, true);
+    assert.equal(row.shelf, 'Супы');
+    assert.equal(row.source, 'own');
+    const shot = await callRaw(port, '/api/admin/recipe-photo?id=' + encodeURIComponent(row.id), null, '', token, 'GET');
+    assert.equal(shot.status, 200);
+    assert.equal(shot.body.equals(png), true);
+    await store.saveCatalog('55', { category: 'soup', title: 'Борщ с фото', body: 'новый текст', source: 'own' });
+    const kept = await store.catalogPhoto(row.id);
+    assert.equal(kept.bytes.equals(png), true);
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

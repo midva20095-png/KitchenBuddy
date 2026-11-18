@@ -115,12 +115,40 @@ function createVk(options) {
       };
     },
 
-    async send(peerId, message, keyboard) {
+    async messagePhoto(peerId, bytes, mime) {
+      const server = await this.call('photos.getMessagesUploadServer', { peer_id: String(peerId) });
+      const uploadUrl = server && server.upload_url;
+      if (!uploadUrl) throw new Error('no-upload');
+      const type = mime === 'image/png' ? 'image/png' : mime === 'image/webp' ? 'image/webp' : 'image/jpeg';
+      const name = type === 'image/png' ? 'photo.png' : type === 'image/webp' ? 'photo.webp' : 'photo.jpg';
+      const form = new FormData();
+      form.append('photo', new Blob([bytes], { type }), name);
+      const uploaded = await this.axios.post(uploadUrl, form, { timeout: 30000 });
+      const raw = uploaded && uploaded.data && typeof uploaded.data === 'object' ? uploaded.data : {};
+      const saved = await this.call('photos.saveMessagesPhoto', {
+        server: raw.server,
+        photo: raw.photo,
+        hash: raw.hash
+      });
+      const photo = Array.isArray(saved) ? saved[0] : null;
+      if (!photo || photo.id == null) throw new Error('no-photo');
+      return `photo${photo.owner_id}_${photo.id}`;
+    },
+
+    async send(peerId, message, keyboard, photo) {
       const params = {
         peer_id: String(peerId),
         random_id: String(crypto.randomInt(1, 2000000000)),
         message: String(message || '').slice(0, 3500)
       };
+      if (photo && photo.bytes && photo.bytes.length) {
+        try {
+          const attachment = await this.messagePhoto(peerId, photo.bytes, photo.mime);
+          if (attachment) params.attachment = attachment;
+        } catch (error) {
+          console.error('Фото рецепта не прикрепилось.');
+        }
+      }
       if (keyboard) params.keyboard = keyboard;
       try {
         return await this.call('messages.send', params);

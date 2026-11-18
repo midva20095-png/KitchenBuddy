@@ -78,3 +78,38 @@ test('ключ уходит в метод, а клавиатура снимае�
   assert.equal(comment.params.guid, 'kb4');
   assert.doesNotMatch(comment.params.message, /secret-token/);
 });
+
+test('фото рецепта крепится к сообщению', async () => {
+  const sent = [];
+  const vk = createVk({
+    token: 'secret-token',
+    groupId: '55',
+    axios: {
+      post: async (url, body) => {
+        if (typeof body !== 'string') {
+          sent.push({ url, upload: true });
+          if (String(url).includes('fail-upload')) throw new Error('upload');
+          return { data: { server: '1', photo: '[]', hash: 'h' } };
+        }
+        const params = paramsOf(body);
+        sent.push({ url, params });
+        if (url.endsWith('/photos.getMessagesUploadServer')) {
+          return { data: { response: { upload_url: sent.some(item => item.params && item.params.peer_id === '8') ? 'https://pu.vk.com/fail-upload' : 'https://pu.vk.com/c' } } };
+        }
+        if (url.endsWith('/photos.saveMessagesPhoto')) {
+          return { data: { response: [{ owner_id: -55, id: 9 }] } };
+        }
+        return { data: { response: 1 } };
+      }
+    }
+  });
+  await vk.send(10, 'Борщ', '', { bytes: Buffer.from('jpeg-bytes-here'), mime: 'image/jpeg' });
+  const message = sent.find(item => String(item.url).endsWith('/messages.send'));
+  assert.equal(message.params.attachment, 'photo-55_9');
+  assert.equal(message.params.message, 'Борщ');
+  assert.doesNotMatch(message.params.message, /secret-token/);
+  await vk.send(8, 'Без снимка', '', { bytes: Buffer.from('jpeg-bytes-here'), mime: 'image/jpeg' });
+  const plain = sent.filter(item => String(item.url).endsWith('/messages.send')).at(-1);
+  assert.equal(plain.params.attachment, undefined);
+  assert.equal(plain.params.message, 'Без снимка');
+});

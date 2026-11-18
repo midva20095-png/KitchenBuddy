@@ -161,11 +161,21 @@ function createBot(options) {
     }
   }
 
+  async function attachPhoto(messages, found) {
+    if (!found || !found.hasPhoto || !store.catalogPhoto || !messages || !messages[0]) return messages;
+    let photo = null;
+    try { photo = await store.catalogPhoto(found.id); } catch (error) { photo = null; }
+    if (!photo || !photo.bytes || !photo.bytes.length) return messages;
+    const next = messages.slice();
+    next[0] = Object.assign({}, next[0], { photo: { bytes: photo.bytes, mime: photo.mime || 'image/jpeg' } });
+    return next;
+  }
+
   async function deliver(peer, messages) {
     const out = [];
     for (const message of messages || []) {
       try {
-        await send(peer, message.text, message.keyboard);
+        await send(peer, message.text, message.keyboard, message.photo);
         out.push(message);
       } catch (error) {
         const code = error && error.code;
@@ -325,7 +335,7 @@ function createBot(options) {
       const done = fromCatalog(result.user, { kind: 'catalog', memory: found.title || '', prompt: '', data: {} }, found, ctx);
       await journal(userId, 'found', found.title || '');
       await keep(done.user);
-      return deliver(fresh.peerId, done.messages);
+      return deliver(fresh.peerId, await attachPhoto(done.messages, found));
     }
     if (result.listCatalog) {
       let rows = [];
@@ -355,7 +365,7 @@ function createBot(options) {
       const done = fromCatalog(result.user, result.job, found, ctx);
       await journal(userId, 'found', found.title || '');
       await keep(done.user);
-      const rest = await deliver(fresh.peerId, done.messages);
+      const rest = await deliver(fresh.peerId, await attachPhoto(done.messages, found));
       return prelude.concat(rest);
     }
     let raw = '';

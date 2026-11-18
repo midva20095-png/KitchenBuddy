@@ -17,7 +17,7 @@ function memoryPool() {
     log,
     async query(sql, params) {
       const text = sql.replace(/\s+/g, ' ').trim();
-      if (text.startsWith('CREATE')) return { rows: [] };
+      if (text.startsWith('CREATE') || text.startsWith('ALTER')) return { rows: [] };
       if (text.startsWith('SELECT COUNT')) return { rows: [{ n: clients.size }] };
       if (text.startsWith('INSERT INTO clients')) {
         if (clients.has(params[0])) return { rows: [] };

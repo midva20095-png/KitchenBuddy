@@ -3,7 +3,21 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { sectionById } = require('./menu');
+const { sectionById, sectionIds } = require('./menu');
+
+function htmlEscape(value) {
+  return String(value || '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[char]));
+}
+
+function shelfOptions() {
+  return sectionIds().map(id => {
+    const node = sectionById(id);
+    if (!node) return '';
+    return `<option value="${htmlEscape(id)}">${htmlEscape(node.short || node.title)}</option>`;
+  }).join('');
+}
 
 const ICON192 = fs.readFileSync(path.join(__dirname, '..', 'assets', 'admin-icon-192.png'));
 const ICON512 = fs.readFileSync(path.join(__dirname, '..', 'assets', 'admin-icon-512.png'));
@@ -63,6 +77,7 @@ const PAGE = `<!doctype html>
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     input, button { font: inherit; }
     input { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; border: 1px solid #d6d3d1; }
+    input[type="file"] { width: 100%; flex: none; }
     button { border: 0; border-radius: 10px; min-height: 48px; padding: 12px 14px; background: #9a3412; color: #fff; font-weight: 700; cursor: pointer; }
     .wrap { overflow-x: auto; }
     button.ghost { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
@@ -73,6 +88,9 @@ const PAGE = `<!doctype html>
     th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e7e5e4; vertical-align: top; }
     th { color: #78716c; font-size: 13px; }
     .bad { color: #be123c; }
+    textarea, select { font: inherit; width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid #d6d3d1; margin: 8px 0; }
+    textarea { min-height: 120px; }
+    img.shot { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; }
     .note { color: #57534e; }
     a { color: #9a3412; }
   </style>
@@ -94,18 +112,40 @@ const PAGE = `<!doctype html>
     <div class="card"><h2>Сводка</h2><div class="grid" id="stats"></div><p class="note" id="engine"></p></div>
     <div class="card">
       <h2>Клиенты</h2>
+      <div class="row">
+        <input id="userId" inputmode="numeric" placeholder="id ВК">
+        <input id="userName" placeholder="Имя">
+        <button type="button" id="addUser">Добавить человека</button>
+      </div>
+      <p id="userMsg" class="note"></p>
       <div class="row"><input id="q" placeholder="Имя или id"><button type="button" id="find">Найти</button></div>
       <div class="wrap"><table><thead><tr><th>Человек</th><th>Сообщения</th><th>Рецепты</th><th>Был</th></tr></thead><tbody id="people"></tbody></table></div>
     </div>
     <div class="card" id="card" style="display:none"></div>
-    <div class="card"><h2>Общая база</h2><div class="wrap"><table><thead><tr><th>Рецепт</th><th>Полка</th><th>Откуда</th></tr></thead><tbody id="base"></tbody></table></div></div>
+    <div class="card">
+      <h2>Рецепт с фото</h2>
+      <input id="recipeTitle" placeholder="Название, например борщ">
+      <select id="recipeShelf"><option value="">Без полки</option>${shelfOptions()}</select>
+      <textarea id="recipeText" placeholder="Ингредиенты и шаги. Так текст уйдёт в чат."></textarea>
+      <input id="recipePhoto" type="file" accept="image/jpeg,image/png,image/webp">
+      <div class="row"><button type="button" id="saveRecipe">Сохранить в базу</button></div>
+      <p id="recipeMsg" class="note"></p>
+      <h2>Общая база</h2>
+      <div class="wrap"><table><thead><tr><th>Фото</th><th>Рецепт</th><th>Полка</th><th>Откуда</th></tr></thead><tbody id="base"></tbody></table></div>
+    </div>
     <div class="card"><h2>Поделились</h2><div class="wrap"><table><thead><tr><th>Рецепт</th><th>Кто</th><th>Где</th></tr></thead><tbody id="shared"></tbody></table></div></div>
   </div>
   <script>
     let token = sessionStorage.getItem('kb_admin') || '';
     const $ = id => document.getElementById(id);
     async function api(path, options) {
-      const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token } }, options || {}));
+      const opts = Object.assign({}, options || {});
+      const form = Boolean(opts.form);
+      delete opts.form;
+      const headers = Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {});
+      if (!form) headers['Content-Type'] = 'application/json';
+      opts.headers = headers;
+      const res = await fetch(path, opts);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Не вышло');
       return data;
@@ -144,7 +184,18 @@ const PAGE = `<!doctype html>
       $('engine').textContent = stats.engine === 'postgres' ? 'Память: PostgreSQL.' : 'Память: файл на сервере. Чтобы карточки переживали деплой, соедините Postgres и переменную DATABASE_URL.';
       await search();
       const catalog = await api('/api/admin/catalog');
-      $('base').innerHTML = (catalog.rows || []).map(row => '<tr><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.shelf || '') + '</td><td>' + (row.source === 'own' ? 'свой' : 'бот') + '</td></tr>').join('') || '<tr><td colspan="3">В общей базе пока пусто.</td></tr>';
+      const lines = [];
+      for (const row of catalog.rows || []) {
+        let pic = '';
+        if (row.hasPhoto && row.id) {
+          try {
+            const shot = await fetch('/api/admin/recipe-photo?id=' + encodeURIComponent(row.id), { headers: { Authorization: 'Bearer ' + token } });
+            if (shot.ok) pic = '<img class="shot" alt="" src="' + URL.createObjectURL(await shot.blob()) + '">';
+          } catch (error) {}
+        }
+        lines.push('<tr><td>' + pic + '</td><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.shelf || '') + '</td><td>' + (row.source === 'own' ? 'свой' : 'бот') + '</td></tr>');
+      }
+      $('base').innerHTML = lines.join('') || '<tr><td colspan="4">В общей базе пока пусто.</td></tr>';
       const shared = await api('/api/admin/shared');
       $('shared').innerHTML = (shared.rows || []).map(row => '<tr><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.name || row.userId) + '</td><td>' + (row.status === 'posted' ? 'на стене' : 'сохранено') + '</td></tr>').join('') || '<tr><td colspan="3">Пока никто не делился.</td></tr>';
     }
@@ -185,7 +236,48 @@ const PAGE = `<!doctype html>
     $('install2').onclick = install;
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
     $('enter').onclick = login;
+    async function addUser() {
+      $('userMsg').textContent = '';
+      try {
+        const data = await api('/api/admin/user', { method: 'POST', body: JSON.stringify({ userId: $('userId').value, name: $('userName').value }) });
+        $('userId').value = '';
+        $('userName').value = '';
+        $('userMsg').textContent = 'Человек добавлен' + (data.name ? ': ' + data.name : '') + '.';
+        await search();
+      } catch (error) {
+        $('userMsg').textContent = error.message;
+      }
+    }
+    async function saveRecipe() {
+      $('recipeMsg').textContent = '';
+      const file = $('recipePhoto').files && $('recipePhoto').files[0];
+      if (!$('recipeTitle').value.trim() || !$('recipeText').value.trim()) {
+        $('recipeMsg').textContent = 'Напишите название и текст рецепта.';
+        return;
+      }
+      if (!file) {
+        $('recipeMsg').textContent = 'Добавьте фотографию.';
+        return;
+      }
+      const form = new FormData();
+      form.append('title', $('recipeTitle').value.trim());
+      form.append('category', $('recipeShelf').value);
+      form.append('body', $('recipeText').value.trim());
+      form.append('photo', file);
+      try {
+        await api('/api/admin/recipe', { method: 'POST', body: form, form: true });
+        $('recipeTitle').value = '';
+        $('recipeText').value = '';
+        $('recipePhoto').value = '';
+        $('recipeMsg').textContent = 'Рецепт с фото в общей базе. В чате он откроется вместе со снимком.';
+        await load();
+      } catch (error) {
+        $('recipeMsg').textContent = error.message;
+      }
+    }
     $('find').onclick = () => search().catch(error => alert(error.message));
+    $('addUser').onclick = () => addUser().catch(error => { $('userMsg').textContent = error.message; });
+    $('saveRecipe').onclick = () => saveRecipe().catch(error => { $('recipeMsg').textContent = error.message; });
     $('out').onclick = () => { sessionStorage.removeItem('kb_admin'); location.reload(); };
     $('people').onclick = event => {
       const link = event.target.closest('[data-id]');
@@ -201,6 +293,65 @@ const PAGE = `<!doctype html>
   </script>
 </body>
 </html>`;
+
+function readRaw(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(new Error('big'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', () => reject(new Error('read')));
+  });
+}
+
+function parseForm(buffer, header) {
+  const found = String(header || '').match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  if (!found) return null;
+  const boundary = (found[1] || found[2] || '').trim();
+  if (!boundary) return null;
+  const sep = Buffer.from('--' + boundary);
+  const parts = [];
+  let start = buffer.indexOf(sep);
+  if (start < 0) return null;
+  start += sep.length;
+  while (start < buffer.length) {
+    if (buffer.slice(start, start + 2).toString() === '--') break;
+    if (buffer.slice(start, start + 2).toString() === '\r\n') start += 2;
+    const headEnd = buffer.indexOf(Buffer.from('\r\n\r\n'), start);
+    if (headEnd < 0) break;
+    const head = buffer.slice(start, headEnd).toString('utf8');
+    const name = /name="([^"]+)"/.exec(head);
+    const mime = /Content-Type:\s*([^\r\n]+)/i.exec(head);
+    const next = buffer.indexOf(sep, headEnd + 4);
+    if (next < 0) break;
+    let data = buffer.slice(headEnd + 4, next);
+    if (data.length >= 2 && data[data.length - 2] === 13 && data[data.length - 1] === 10) data = data.slice(0, -2);
+    parts.push({ name: name ? name[1] : '', mime: mime ? mime[1].trim() : '', data });
+    start = next + sep.length;
+  }
+  return parts;
+}
+
+function formText(parts, name) {
+  const part = (parts || []).find(item => item.name === name);
+  return part ? part.data.toString('utf8').trim() : '';
+}
+
+function imageType(buf) {
+  if (!buf || buf.length < 12) return '';
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP') return 'image/webp';
+  return '';
+}
 
 function sameSecret(left, right) {
   const a = Buffer.from(String(left || ''));
@@ -312,6 +463,54 @@ function createAdmin(options) {
         const card = await db.clientCard(url.searchParams.get('id') || '');
         if (!card) send(res, 404, { error: 'Клиент не найден.' });
         else send(res, 200, card);
+      } else if (url.pathname === '/api/admin/user' && req.method === 'POST') {
+        const body = await readBody(req);
+        const userId = String(body.userId || '').replace(/\D/g, '').slice(0, 15);
+        const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!userId) {
+          send(res, 400, { error: 'Напишите id ВК.' });
+        } else {
+          await db.ensureClient(userId, { name }, config.groupId || '', { count: false });
+          if (db.note) await db.note(userId, 'admin', 'Добавлен в админке');
+          send(res, 200, { userId, name });
+        }
+      } else if (url.pathname === '/api/admin/recipe' && req.method === 'POST') {
+        let raw;
+        try {
+          raw = await readRaw(req, 2800000);
+        } catch (error) {
+          send(res, 400, { error: 'Фото больше 2,5 МБ. Уменьшите снимок и загрузите снова.' });
+          return true;
+        }
+        const parts = parseForm(raw, req.headers['content-type']);
+        const title = formText(parts, 'title').replace(/\s+/g, ' ').slice(0, 80);
+        const category = formText(parts, 'category').replace(/[^\w-]/g, '').slice(0, 40);
+        const text = formText(parts, 'body').slice(0, 4000);
+        const file = (parts || []).find(item => item.name === 'photo' && item.data && item.data.length);
+        const mime = file ? imageType(file.data) : '';
+        if (!title || !text) {
+          send(res, 400, { error: 'Напишите название и текст рецепта.' });
+        } else if (!file || !mime || file.data.length > 2500000) {
+          send(res, 400, { error: file && file.data.length > 2500000 ? 'Фото больше 2,5 МБ. Уменьшите снимок и загрузите снова.' : 'Нужна фотография JPEG, PNG или WEBP.' });
+        } else {
+          const owner = String(config.groupId || '1').replace(/\D/g, '') || '1';
+          const saved = await db.saveCatalog(owner, {
+            category: sectionById(category) ? category : '',
+            title,
+            query: title,
+            body: text,
+            source: 'own',
+            photo: { bytes: file.data, mime }
+          });
+          send(res, 200, { id: saved && saved.id ? String(saved.id) : '', title });
+        }
+      } else if (url.pathname === '/api/admin/recipe-photo') {
+        const photo = db.catalogPhoto ? await db.catalogPhoto(url.searchParams.get('id') || '') : null;
+        if (!photo) send(res, 404, { error: 'Фото нет.' });
+        else {
+          res.writeHead(200, { 'content-type': photo.mime || 'image/jpeg', 'cache-control': 'private, max-age=3600' });
+          res.end(photo.bytes);
+        }
       } else if (url.pathname === '/api/admin/catalog') {
         const rows = db.listCatalog ? await db.listCatalog() : [];
         send(res, 200, {
@@ -319,7 +518,8 @@ function createAdmin(options) {
             id: row.id || '',
             title: row.title || 'Рецепт',
             shelf: shelf(row.category),
-            source: row.source === 'own' ? 'own' : 'found'
+            source: row.source === 'own' ? 'own' : 'found',
+            hasPhoto: Boolean(row.hasPhoto)
           }))
         });
       } else if (url.pathname === '/api/admin/shared') {
