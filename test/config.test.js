@@ -28,6 +28,8 @@ test('настройки читают числа и не тащат секрет
   assert.equal(config.wallReplies, false);
   assert.equal(config.chatReplies, true);
   assert.equal(config.wallHourLimit, 0);
+  assert.equal(config.subscribersOnly, true);
+  assert.equal(loadConfig({ SUBSCRIBERS_ONLY: '0' }).subscribersOnly, false);
   assert.equal(Object.hasOwn(config, 'gigaKey'), false);
   const broken = loadConfig({
     GIGACHAT_DAILY_LIMIT: '-1',

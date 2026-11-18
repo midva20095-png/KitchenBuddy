@@ -173,3 +173,30 @@ test('беседа молчит, пока её не попросили, а ст�
   assert.equal(comments.filter(item => item.id === 33).length, 0);
   assert.ok(calls >= 1);
 });
+
+test('неподписчику в личке уходит ссылка, беседа без обращения молчит', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  const sent = [];
+  const prompts = [];
+  const bot = createBot({
+    store,
+    config: {
+      groupId: '243405772', communityName: 'Кухня', botName: 'Кухонный', screenName: '',
+      dailyLimit: 40, wallHourLimit: 30, aiParallel: 2, subscribersOnly: true
+    },
+    now: () => now,
+    lessons: [],
+    member: async () => false,
+    giga: { complete: async (req) => { prompts.push(req); return RECIPE; } },
+    send: async (peer, text) => { sent.push({ peer, text }); },
+    comment: async () => {},
+    typing: async () => {}
+  });
+  await bot.handle({ userId: '12', peerId: 12, text: 'борщ на 4', place: 'dm', messageId: 1 });
+  assert.equal(prompts.length, 0);
+  assert.match(sent.at(-1).text, /подписчик/);
+  assert.match(sent.at(-1).text, /club243405772/);
+  await bot.handle({ userId: '12', peerId: 2000000002, text: 'привет', place: 'chat', messageId: 2 });
+  assert.equal(sent.length, 1);
+});

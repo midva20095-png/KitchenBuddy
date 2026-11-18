@@ -23,10 +23,14 @@ function board(rows) {
 
 function menuKeyboard() {
   return board([
-    [textButton('Что приготовить', { a: 'dish' }, 'primary'), textButton('Из продуктов', { a: 'ingredients' }, 'primary')],
-    [textButton('Быстрый ужин', { a: 'quick' }, 'positive'), textButton('По диете', { a: 'diet' }, 'positive')],
-    [textButton('Случайный', { a: 'random' }, 'secondary'), textButton('Избранное', { a: 'favorites' }, 'secondary')],
-    [textButton('Помощь', { a: 'help' }, 'secondary')]
+    [textButton('Первые', { a: 'section', s: 'first' }, 'primary'), textButton('Вторые', { a: 'section', s: 'second' }, 'primary')],
+    [textButton('Салаты', { a: 'section', s: 'salad' }, 'primary'), textButton('Закуски', { a: 'section', s: 'starter' }, 'primary')],
+    [textButton('Завтраки', { a: 'section', s: 'breakfast' }, 'primary'), textButton('Напитки', { a: 'section', s: 'drink' }, 'primary')],
+    [textButton('Выпечка', { a: 'section', s: 'bake' }, 'primary'), textButton('Десерты', { a: 'section', s: 'sweet' }, 'primary')],
+    [textButton('Кондитеру', { a: 'section', s: 'pastry' }, 'primary'), textButton('Аллергены', { a: 'section', s: 'allergen' }, 'secondary')],
+    [textButton('Диета', { a: 'section', s: 'diet' }, 'secondary'), textButton('Из продуктов', { a: 'ingredients' }, 'positive')],
+    [textButton('Быстрый ужин', { a: 'quick' }, 'positive'), textButton('Случайный', { a: 'random' }, 'secondary')],
+    [textButton('Избранное', { a: 'favorites' }, 'secondary'), textButton('Помощь', { a: 'help' }, 'secondary')]
   ]);
 }
 
@@ -103,6 +107,8 @@ function backKeyboard() {
 
 module.exports = {
   fitLabel,
+  textButton,
+  board,
   menuKeyboard,
   recipeKeyboard,
   servingsKeyboard,

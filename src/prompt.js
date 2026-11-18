@@ -54,6 +54,15 @@ function buildUserPrompt(kind, data) {
   if (kind === 'diet') {
     return `Ограничение: ${source.diet}. Это обычная домашняя кухня, не медицинская диета. Верни один рецепт JSON на 2 порции.`;
   }
+  if (kind === 'section') {
+    return [
+      `Раздел: ${clip(source.title || '', 80)}`,
+      clip(source.brief || '', 500),
+      source.dish ? `Блюдо: ${clip(source.dish, 200)}` : 'Придумай одно конкретное блюдо внутри раздела, не список.',
+      servingsLine(source.servings),
+      'Верни один домашний рецепт JSON строго в этом разделе.'
+    ].filter(Boolean).join('\n');
+  }
   if (kind === 'random') {
     return `Придумай один домашний рецепт. Тема: ${source.theme}. Порции: 2. Верни JSON.`;
   }

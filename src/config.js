@@ -30,6 +30,7 @@ function loadConfig(env) {
     wallReplies: flag(source.WALL_REPLIES, true),
     chatReplies: flag(source.CHAT_REPLIES, true),
     wallHourLimit: nonNegative(source.WALL_HOUR_LIMIT, 30),
+    subscribersOnly: flag(source.SUBSCRIBERS_ONLY, true),
     aiParallel: Math.min(4, Math.max(1, Number(source.AI_PARALLEL) || 2)),
     dataDir: path.resolve(String(source.DATA_DIR || path.join(process.cwd(), 'data')))
   };

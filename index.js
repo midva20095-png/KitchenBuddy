@@ -2,7 +2,9 @@
 
 require('dotenv').config();
 
+const path = require('path');
 const { loadConfig } = require('./src/config');
+const { loadLessons } = require('./src/lessons');
 const { createStore } = require('./src/store');
 const { createGigaChat } = require('./src/gigachat');
 const { createVk } = require('./src/vk');
@@ -21,10 +23,13 @@ const state = {
 const store = createStore(config.dataDir);
 const giga = createGigaChat({ env: process.env });
 const vk = config.token ? createVk({ token: config.token, groupId: config.groupId }) : null;
+const lessons = loadLessons(path.join(config.dataDir, 'lessons.json'));
 const bot = createBot({
   store,
   giga,
   config,
+  lessons,
+  member: vk && config.subscribersOnly ? userId => vk.isMember(userId) : null,
   send: (peer, text, keyboard) => (vk ? vk.send(peer, text, keyboard) : Promise.resolve()),
   comment: (input, text) => (vk ? vk.comment(input, text) : Promise.resolve()),
   typing: peer => (vk ? vk.typing(peer) : Promise.resolve())

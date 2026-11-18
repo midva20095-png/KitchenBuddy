@@ -14,6 +14,9 @@ const { buildUserPrompt } = require('./prompt');
 const { parseRecipe, asPlain, formatRecipe, formatShopping, formatStep, commentBody } = require('./recipe');
 const { normalize, clip, moscowDay } = require('./text');
 const { blockedReason } = require('./guard');
+const { sectionById, sectionAlias, sectionKeyboard, sectionText } = require('./menu');
+const { withPromo } = require('./promo');
+const { matchLesson } = require('./lessons');
 
 const DIETS = {
   vegetarian: 'вегетарианское, без мяса и рыбы',
@@ -101,7 +104,7 @@ function welcomeText(name) {
   return [
     `Здравствуйте. Я ${name || 'Кухонный'}, кухонный помощник сообщества.`,
     '',
-    'Могу подобрать рецепт по названию, придумать блюдо из продуктов, которые уже есть, собрать быстрый ужин, учесть ограничение, сохранить избранное и провести по шагам.',
+    'Разделы: первые и вторые, гарниры, салаты, закуски, завтраки, напитки, выпечка и десерты. Отдельно — кондитеру, без аллергенов и диетическое.',
     '',
     'Напишите блюдо своими словами или выберите кнопку внизу.'
   ].join('\n');
@@ -119,6 +122,8 @@ function helpText(communityName) {
     '• на 4 порции',
     '• по шагам',
     '• удали 2',
+    '• кондитеру',
+    '• первые',
     '',
     'В беседе сообщества отвечаю, если в сообщении есть «рецепт», название бота, ответ на моё сообщение или упоминание сообщества.',
     'Фото не разбираю. Медицинских назначений не даю.'
@@ -127,6 +132,12 @@ function helpText(communityName) {
 
 function say(text, keyboard) {
   return { text, keyboard: keyboard || menuKeyboard() };
+}
+
+function shown(text, ctx, query, compact) {
+  if (String(text || '').includes('988')) return text;
+  const lesson = matchLesson(query || '', (ctx && ctx.lessons) || []);
+  return withPromo(text, { lesson, compact: !!compact });
 }
 
 function isGreeting(text) {
@@ -254,7 +265,7 @@ function aiJob(kind, data, ask) {
 function menuTurn(user, ctx) {
   user.mode = 'menu';
   user.draft = {};
-  return { user, messages: [say(welcomeText(ctx && ctx.botName), menuKeyboard())], job: null };
+  return { user, messages: [say(shown(welcomeText(ctx && ctx.botName), ctx), menuKeyboard())], job: null };
 }
 
 function noRecipe(user) {
@@ -361,9 +372,47 @@ function beginQuick(user) {
 }
 
 function beginDiet(user) {
-  user.mode = 'diet';
-  user.draft = {};
-  return { user, messages: [say('Какое ограничение учесть? Это обычная домашняя кухня, не назначение врача.', dietKeyboard())], job: null };
+  return openSection(user, 'diet');
+}
+
+function openSection(user, id) {
+  const node = sectionById(id);
+  if (!node) return { user, messages: [say('Такого раздела нет.', menuKeyboard())], job: null };
+  if (!node.children) return makeSection(user, id, '', null);
+  user.mode = 'section';
+  user.draft = { section: id };
+  return { user, messages: [say(sectionText(id), sectionKeyboard(id))], job: null };
+}
+
+function makeSection(user, id, dish, servings) {
+  const node = sectionById(id);
+  if (!node) return { user, messages: [say('Такого раздела нет.', menuKeyboard())], job: null };
+  const name = String(dish || '').trim();
+  const data = {
+    title: node.title,
+    brief: node.brief,
+    dish: name,
+    servings: servings == null ? 0 : servings,
+    text: [node.title, node.brief, name].filter(Boolean).join('. ')
+  };
+  return jobReply(user, aiJob('section', data, 'Собираю рецепт…'));
+}
+
+function fromSectionDish(user, id, text) {
+  const servings = readServings(text);
+  const name = cleanDish(text);
+  if (!dishNameOk(name)) {
+    const keyboard = sectionKeyboard(id) || menuKeyboard();
+    return { user, messages: [say('Напишите блюдо в этом разделе или нажмите кнопку.', keyboard)], job: null };
+  }
+  return makeSection(user, id, name, servings);
+}
+
+function namedSection(user, text) {
+  if (['dish', 'ingredients', 'servings', 'quick', 'diet'].includes(user.mode)) return null;
+  const id = sectionAlias(text);
+  if (!id) return null;
+  return openSection(user, id);
 }
 
 function askServings(user, draft) {
@@ -462,6 +511,17 @@ function routeFreeText(user, text) {
     if (!code) return { user, messages: [say('Выберите ограничение кнопкой.', dietKeyboard())], job: null };
     return fromDiet(user, code);
   }
+  if (user.mode === 'section' && user.draft && user.draft.section) {
+    const picked = namedSection(user, text);
+    if (picked) return picked;
+    if (followUp(text, !!user.lastRecipe)) return fromFollow(user, text);
+    if (looksLikeIngredients(text)) return fromIngredientsText(user, text);
+    const quickHere = wantsQuick(text);
+    if (quickHere) return fromQuick(user, quickHere);
+    return fromSectionDish(user, user.draft.section, text);
+  }
+  const picked = namedSection(user, text);
+  if (picked) return picked;
   const hasRecipe = !!user.lastRecipe;
   if (followUp(text, hasRecipe)) return fromFollow(user, text);
   if (user.mode !== 'steps' && looksLikeIngredients(text)) return fromIngredientsText(user, text);
@@ -493,7 +553,7 @@ function turn(user, input, ctx) {
   if (reason) {
     source.mode = 'menu';
     source.draft = {};
-    return { user: source, messages: [say(reason, menuKeyboard())], job: null };
+    return { user: source, messages: [say(shown(reason), menuKeyboard())], job: null };
   }
   if (isGreeting(text) && !payload && place !== 'chat') return menuTurn(source, ctx);
   if (!text && !payload) {
@@ -506,13 +566,15 @@ function turn(user, input, ctx) {
   if (payload && payload.a === 'servings') return finishServings(source, Number(payload.n) || 0);
   if (payload && payload.a === 'minutes') return fromQuick(source, Number(payload.n));
   if (payload && payload.a === 'pickdiet') return fromDiet(source, String(payload.d || ''));
+  if (payload && payload.a === 'section') return openSection(source, String(payload.s || ''));
+  if (payload && payload.a === 'make') return makeSection(source, String(payload.s || ''), '', null);
   if (payload && payload.a === 'open') return openFavorite(source, Number(payload.i));
   const action = actionOf(text, payload);
   if (action === 'menu') return menuTurn(source, ctx);
   if (action === 'help') {
     source.mode = 'menu';
     source.draft = {};
-    return { user: source, messages: [say(helpText(ctx && ctx.communityName), menuKeyboard())], job: null };
+    return { user: source, messages: [say(shown(helpText(ctx && ctx.communityName), ctx), menuKeyboard())], job: null };
   }
   if (action === 'favorites') return showFavorites(source);
   if (action === 'shop') return showShop(source);
@@ -526,7 +588,7 @@ function turn(user, input, ctx) {
   if (action === 'dish') return beginDish(source);
   if (action === 'ingredients') return beginIngredients(source);
   if (action === 'quick') return beginQuick(source);
-  if (action === 'diet') return beginDiet(source);
+  if (action === 'diet') return openSection(source, 'diet');
   if (action === 'random') return fromRandom(source);
   return routeFreeText(source, text);
 }
@@ -535,7 +597,7 @@ function limitTurn(user) {
   const next = structuredClone(user);
   next.mode = 'menu';
   next.draft = {};
-  return { user: next, messages: [say(LIMIT_TEXT, menuKeyboard())], job: null };
+  return { user: next, messages: [say(withPromo(LIMIT_TEXT), menuKeyboard())], job: null };
 }
 
 function complete(user, job, raw, ctx) {
@@ -545,7 +607,7 @@ function complete(user, job, raw, ctx) {
     const text = commentBody(raw, (ctx && ctx.invite) || 'Полный рецепт — в сообщениях сообщества.');
     if (!text) return { user: next, messages: [], commentText: '' };
     bumpUsage(next, now, 'comment');
-    return { user: next, messages: [], commentText: text };
+    return { user: next, messages: [], commentText: shown(text, ctx, job.memory, true) };
   }
   const recipe = parseRecipe(raw);
   const answer = recipe ? formatRecipe(recipe) : (asPlain(raw) || 'Не разобрала ответ. Напишите запрос ещё раз, можно короче.');
@@ -560,7 +622,7 @@ function complete(user, job, raw, ctx) {
   const keyboard = recipe || next.lastRecipe ? recipeKeyboard(recipe || next.lastRecipe) : menuKeyboard();
   return {
     user: next,
-    messages: [{ text: answer, keyboard }],
+    messages: [{ text: shown(answer, ctx, job.memory || job.prompt), keyboard }],
     commentText: ''
   };
 }

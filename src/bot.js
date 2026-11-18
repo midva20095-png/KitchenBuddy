@@ -5,19 +5,32 @@ const { menuKeyboard } = require('./keyboard');
 const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
 const { wallWorthy } = require('./incoming');
+const { withPromo } = require('./promo');
 
 const FAIL = 'Повар сейчас не ответил. Напишите ещё раз через минуту.';
 
-function makeCtx(config, now) {
+function makeCtx(config, now, lessons) {
   const screen = config.screenName;
   return {
     now,
     botName: config.botName,
     communityName: config.communityName,
+    lessons: lessons || [],
     invite: screen
       ? `Полный рецепт — в сообщениях: https://vk.me/${screen}`
       : 'Полный рецепт — в сообщениях сообщества.'
   };
+}
+
+function joinText(config) {
+  const id = String((config && config.groupId) || '').replace(/\D/g, '');
+  const screen = config && config.screenName;
+  const url = screen ? `https://vk.ru/${screen}` : (id ? `https://vk.ru/club${id}` : 'https://vk.ru/club243405772');
+  return [
+    'Бот отвечает подписчикам сообщества.',
+    `Вступить: ${url}`,
+    'После вступления напишите «Начать».'
+  ].join('\n');
 }
 
 function createBot(options) {
@@ -28,6 +41,8 @@ function createBot(options) {
   const comment = options.comment;
   const typing = options.typing;
   const clock = options.now || (() => new Date());
+  const lessons = options.lessons || (config && config.lessons) || [];
+  const memberOf = options.member;
   const seen = new Set();
   const tails = new Map();
   const wallTimes = [];
@@ -93,6 +108,16 @@ function createBot(options) {
     return slot(() => giga.complete({ system, history, prompt }));
   }
 
+  async function subscriber(userId) {
+    if (!config.subscribersOnly || !memberOf) return true;
+    try {
+      return await memberOf(userId);
+    } catch (error) {
+      console.error('ВК: подписку не проверила, отвечаю как обычно.');
+      return true;
+    }
+  }
+
   async function runWall(input, now, ctx) {
     if (blockedReason(input.text) || !wallWorthy(input.text)) return [];
     const key = `${config.groupId || '0'}:${input.commentId}`;
@@ -142,7 +167,7 @@ function createBot(options) {
 
   async function run(input) {
     const now = clock();
-    const ctx = makeCtx(config, now);
+    const ctx = makeCtx(config, now, lessons);
     const userId = String((input && input.userId) || '').replace(/\D/g, '');
     if (!input || !userId) return [];
     const fresh = Object.assign({}, input, { userId });
@@ -155,6 +180,12 @@ function createBot(options) {
       user = null;
     }
     if (!user) user = blankUser(userId);
+    if (!(await subscriber(userId))) {
+      const peek = turn(user, fresh, ctx);
+      if (peek.ignore) return [];
+      console.log('ВК: не подписчик, отправила ссылку на сообщество.');
+      return deliver(fresh.peerId, [{ text: joinText(config), keyboard: menuKeyboard() }]);
+    }
     const result = turn(user, fresh, ctx);
     if (result.ignore) return [];
     if (!result.job) {
@@ -177,7 +208,7 @@ function createBot(options) {
     } catch (error) {
       const status = error && error.response && error.response.status;
       console.error(`GigaChat не ответил${status ? ` (HTTP ${status})` : ''}.`);
-      const failed = await deliver(fresh.peerId, [{ text: FAIL, keyboard: menuKeyboard() }]);
+      const failed = await deliver(fresh.peerId, [{ text: withPromo(FAIL), keyboard: menuKeyboard() }]);
       return prelude.concat(failed);
     }
     const done = complete(result.user, result.job, raw, ctx);

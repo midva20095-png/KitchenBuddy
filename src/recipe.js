@@ -110,7 +110,7 @@ function commentBody(raw, invite) {
   }
   if (!body) return '';
   const extra = invite && !/сообщества|vk\.me/i.test(body) ? `\n\n${invite}` : '';
-  return clip(`${body}${extra}`, 500);
+  return clip(`${body}${extra}`, 280);
 }
 
 module.exports = {

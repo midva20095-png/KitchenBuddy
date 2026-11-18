@@ -119,4 +119,44 @@ test('избранное, шаги и лимит живут отдельно о�
   assert.equal(comment.user.wallCount, 1);
   assert.equal(comment.user.usageCount, 0);
   assert.match(comment.commentText, /бульона/);
+  assert.match(comment.commentText, /ЯгаГенератор/);
+  assert.ok(comment.commentText.length <= 500);
+});
+
+test('раздел кондитера собирает рецепт и дописывает проекты', () => {
+  const pastry = turn(blankUser('1'), { payload: { a: 'section', s: 'pastry' } }, ctx);
+  assert.equal(pastry.job, null);
+  assert.match(pastry.messages[0].text, /Кондитеру/);
+  assert.match(labels(pastry.messages[0].keyboard).join(' '), /Торты/);
+  assert.match(labels(pastry.messages[0].keyboard).join(' '), /Без аллергенов/);
+  assert.match(labels(pastry.messages[0].keyboard).join(' '), /Диетическая/);
+
+  const free = turn(pastry.user, { payload: { a: 'section', s: 'pfree' } }, ctx);
+  assert.match(labels(free.messages[0].keyboard).join(' '), /Без глютена/);
+  assert.match(labels(free.messages[0].keyboard).join(' '), /Назад/);
+
+  const diet = turn(blankUser('1'), { payload: { a: 'section', s: 'diet' } }, ctx);
+  assert.match(labels(diet.messages[0].keyboard).join(' '), /Для кондитера/);
+  assert.match(diet.messages[0].text, /не лечебная диета/);
+
+  const cake = turn(pastry.user, { payload: { a: 'make', s: 'cake' } }, ctx);
+  assert.equal(cake.job.kind, 'section');
+  assert.match(cake.job.prompt, /торт/i);
+
+  const typed = turn(pastry.user, { text: 'медовик на 8' }, ctx);
+  assert.equal(typed.job.kind, 'section');
+  assert.match(typed.job.prompt, /медовик/);
+  assert.match(typed.job.prompt, /Порции: 8/);
+
+  const done = complete(cake.user, cake.job, RECIPE, Object.assign({}, ctx, {
+    lessons: [{ title: 'Торт медовик', url: 'https://vk.ru/wall-1_9', kind: 'masterclass', keys: 'торт медовик коржи' }]
+  }));
+  assert.match(done.messages[0].text, /🍳 Борщ/);
+  assert.match(done.messages[0].text, /мастер-класс/);
+  assert.match(done.messages[0].text, /wall-1_9/);
+  assert.match(done.messages[0].text, /ЯгаГенератор/);
+  assert.match(done.messages[0].text, /НейроЯга/);
+  assert.match(done.messages[0].text, /Баба Яга/);
+  assert.match(done.messages[0].text, /Точки и линии/);
+  assert.doesNotMatch(done.user.history[1].content, /ЯгаГенератор/);
 });

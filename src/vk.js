@@ -56,6 +56,14 @@ function createVk(options) {
       return data.response;
     },
 
+    async isMember(userId) {
+      const id = String(userId || '').replace(/\D/g, '');
+      if (!id || !this.groupId) return true;
+      const response = await this.call('groups.isMember', { group_id: this.groupId, user_id: id });
+      if (response && typeof response === 'object') return Number(response.member) === 1;
+      return Number(response) === 1;
+    },
+
     async resolveGroup() {
       try {
         const info = await this.call('groups.getById', {});
