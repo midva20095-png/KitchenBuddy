@@ -12,7 +12,6 @@ const { createGigaChat } = require('./src/gigachat');
 const { createVk } = require('./src/vk');
 const { createBot } = require('./src/bot');
 const { startPoll } = require('./src/poll');
-const { placeSearchButton } = require('./src/widget');
 const { startServer } = require('./src/server');
 
 const config = loadConfig();
@@ -92,7 +91,7 @@ function startBot(store) {
     console.log('VK_GROUP_TOKEN не задан. HTTP жив, к сообществу не подключаюсь.');
     return;
   }
-  startPoll({ vk, bot, config, state, placeButton: placeSearchButton }).catch(error => {
+  startPoll({ vk, bot, config, state }).catch(error => {
     console.error('ВК остановился.');
     state.vkOnline = false;
     state.vkHint = error && error.message ? 'Нет связи с ВКонтакте.' : 'Нет связи с ВКонтакте.';
