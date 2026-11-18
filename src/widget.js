@@ -98,9 +98,15 @@ async function pinSearchButton(token, groupId) {
   if (access.length < 20 || !id) throw new Error('ВК не выдал разрешение на кнопку.');
   const jpeg = await fs.promises.readFile(COVER);
   const coverId = await uploadCover(access, jpeg);
-  await publishCover(access, widgetCode(id, coverId));
-  console.log(`Кнопка «Поиск рецептов» стоит на странице сообщества и ведёт в чат ${chatLink(id)}.`);
-  return true;
+  const code = widgetCode(id, coverId);
+  try {
+    await publishCover(access, code);
+    console.log(`Кнопка «Поиск рецептов» стоит на странице сообщества и ведёт в чат ${chatLink(id)}.`);
+  } catch (error) {
+    const text = String((error && error.message) || 'не встала').replace(/access_token=[^&\s]+/g, '');
+    console.error(`Кнопка через ключ не встала: ${text}. Жду подтверждение в окне ВК.`);
+  }
+  return { code };
 }
 
 async function placeSearchButton(vk) {

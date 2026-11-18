@@ -102,8 +102,10 @@ function startServer(options) {
           sendJson(res, 400, { ok: false, error: 'ВК не выдал разрешение на кнопку.' });
           return;
         }
-        await pin(token, groupId);
-        sendJson(res, 200, { ok: true });
+        const placed = await pin(token, groupId);
+        const body = { ok: true };
+        if (placed && placed.code) body.code = String(placed.code).slice(0, 4000);
+        sendJson(res, 200, body);
       }).catch(error => {
         if (res.headersSent) return;
         const message = String((error && error.message) || 'Кнопку не удалось поставить.').replace(/access_token=[^&\s]+/g, '');
