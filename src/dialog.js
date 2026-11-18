@@ -103,8 +103,8 @@ function bumpUsage(user, now, kind) {
   user.usageCount += 1;
 }
 
-function welcomeText(name) {
-  return `Здравствуйте. Я ${name || 'Кухонный'}. Напишите блюдо, например «борщ на 4».`;
+function welcomeText() {
+  return 'Здравствуйте. Я Кухонный Помощник. Напишите блюдо, например «борщ на 4».';
 }
 
 function helpText() {

@@ -22,7 +22,7 @@ function labels(keyboard) {
 test('свободный текст становится рецептом, уточнением или отказом', () => {
   const hello = turn(blankUser('1'), { text: 'Привет' }, ctx);
   assert.equal(hello.job, null);
-  assert.match(hello.messages[0].text, /Кухонный/);
+  assert.equal(hello.messages[0].text, 'Здравствуйте. Я Кухонный Помощник. Напишите блюдо, например «борщ на 4».');
 
   const dish = turn(blankUser('1'), { text: 'борщ на 6' }, ctx);
   assert.equal(dish.job.kind, 'dish');
