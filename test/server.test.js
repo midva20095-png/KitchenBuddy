@@ -54,6 +54,7 @@ test('страница здоровья не показывает секреты
     assert.equal(app.status, 200);
     assert.match(app.body, /Поставить на страницу/);
     assert.match(app.body, /Поиск рецептов/);
+    assert.match(app.body, /body\.placed/);
     const pin = await post(port, '/api/app/pin', { token: 'secret-widget-token-value', groupId: '99' });
     assert.equal(pin.status, 400);
     assert.doesNotMatch(pin.body, /secret-widget-token-value/);
@@ -63,13 +64,17 @@ test('страница здоровья не показывает секреты
       port: 0,
       config: { port: 0, groupId: '243405772', communityName: 'Кухня', gigaConfigured: false },
       state: {},
-      pin: async (token, groupId) => { placed.push({ token, groupId }); }
+      pin: async (token, groupId) => {
+        placed.push({ token, groupId });
+        return { placed: true, code: 'return {"title":"x"};' };
+      }
     });
     await new Promise(resolve => second.once('listening', resolve));
     const pinPort = second.address().port;
     const ok = await post(pinPort, '/api/app/pin', { token: 'secret-widget-token-value', groupId: '243405772' });
     assert.equal(ok.status, 200);
-    assert.deepEqual(JSON.parse(ok.body), { ok: true });
+    assert.deepEqual(JSON.parse(ok.body), { ok: true, placed: true });
+    assert.doesNotMatch(ok.body, /return/);
     assert.equal(placed[0].groupId, '243405772');
     assert.doesNotMatch(ok.body, /secret-widget-token-value/);
     await new Promise(resolve => second.close(resolve));

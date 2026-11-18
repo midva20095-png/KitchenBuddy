@@ -56,7 +56,7 @@ function appPage() {
         say('Кнопка поставлена. Обновите страницу сообщества: вверху будет «Поиск рецептов».');
       }
       if (String(type).indexOf('WidgetPreviewBoxFailed') >= 0) {
-        say('ВК не открыл окно кнопки. Откройте приложение ещё раз со страницы сообщества.');
+        say('Окно ВК не открылось. Обновите страницу сообщества: если вверху уже есть «Поиск рецептов», кнопка стоит.');
         document.getElementById('pin').disabled = false;
       }
     });
@@ -79,6 +79,10 @@ function appPage() {
       }).then(function (res) {
         return res.json().then(function (body) { return { ok: res.ok, body: body }; });
       }).then(function (result) {
+        if (result.ok && result.body && result.body.placed) {
+          say('Кнопка «Поиск рецептов» стоит на странице сообщества и открывает чат с ботом. Обновите страницу сообщества.');
+          return;
+        }
         if (result.ok && result.body && result.body.code) {
           vkSend('VKWebAppShowCommunityWidgetPreviewBox', {
             group_id: Number(groupId),

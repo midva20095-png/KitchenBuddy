@@ -104,7 +104,8 @@ function startServer(options) {
         }
         const placed = await pin(token, groupId);
         const body = { ok: true };
-        if (placed && placed.code) body.code = String(placed.code).slice(0, 4000);
+        if (placed && placed.placed) body.placed = true;
+        else if (placed && placed.code) body.code = String(placed.code).slice(0, 4000);
         sendJson(res, 200, body);
       }).catch(error => {
         if (res.headersSent) return;

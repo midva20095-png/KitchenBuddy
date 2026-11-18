@@ -113,6 +113,7 @@ async function pinSearchButton(token, groupId) {
   try {
     await publishCover(access, code);
     console.log(`Кнопка «Поиск рецептов» стоит на странице сообщества и ведёт в чат ${chatLink(id)}.`);
+    return { placed: true };
   } catch (error) {
     const text = String((error && error.message) || 'не встала').replace(/access_token=[^&\s]+/g, '');
     console.error(`Кнопка через ключ не встала: ${text}. Жду подтверждение в окне ВК.`);
