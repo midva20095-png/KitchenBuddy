@@ -37,7 +37,7 @@ function uploadFields(raw) {
 function failText(error) {
   const code = Number(error && (error.code || error.error_code || error.vkCode));
   if (code === 15 || code === 27 || code === 28) {
-    return 'Ключ сообщества не ставит кнопку на страницу. Нужен ключ приложения в переменной VK_WIDGET_TOKEN, как у кнопки в другом боте.';
+    return 'Ключ сообщений не ставит эту кнопку. Откройте мини-приложение KitchenBuddy из сообщества на компьютере и нажмите «Поставить на страницу».';
   }
   if (code === 100 || code === 129) return 'ВК не принял картинку или ссылку кнопки.';
   return 'Кнопку «Поиск рецептов» не удалось поставить.';
@@ -92,18 +92,25 @@ async function publishCover(token, code) {
   return true;
 }
 
-async function placeSearchButton(vk) {
-  const groupId = vk && vk.groupId;
-  const token = String(process.env.VK_WIDGET_TOKEN || (vk && vk.token) || '').trim();
-  if (!groupId || token.length < 20) {
-    console.log('Кнопка «Поиск рецептов» не поставлена: нет ключа приложения VK_WIDGET_TOKEN.');
-    return false;
-  }
+async function pinSearchButton(token, groupId) {
+  const access = String(token || '').trim();
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (access.length < 20 || !id) throw new Error('ВК не выдал разрешение на кнопку.');
   const jpeg = await fs.promises.readFile(COVER);
-  const coverId = await uploadCover(token, jpeg);
-  await publishCover(token, widgetCode(groupId, coverId));
-  console.log(`Кнопка «Поиск рецептов» стоит на странице сообщества и ведёт в чат ${chatLink(groupId)}.`);
+  const coverId = await uploadCover(access, jpeg);
+  await publishCover(access, widgetCode(id, coverId));
+  console.log(`Кнопка «Поиск рецептов» стоит на странице сообщества и ведёт в чат ${chatLink(id)}.`);
   return true;
 }
 
-module.exports = { chatLink, widgetCode, uploadFields, placeSearchButton, failText };
+async function placeSearchButton(vk) {
+  const groupId = vk && vk.groupId;
+  const token = String(process.env.VK_WIDGET_TOKEN || '').trim();
+  if (!groupId || token.length < 20) {
+    console.log('Кнопка «Поиск рецептов» ставится из мини-приложения KitchenBuddy: откройте его в сообществе на компьютере и нажмите «Поставить на страницу».');
+    return false;
+  }
+  return pinSearchButton(token, groupId);
+}
+
+module.exports = { chatLink, widgetCode, uploadFields, placeSearchButton, pinSearchButton, failText };

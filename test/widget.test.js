@@ -10,5 +10,5 @@ test('кнопка поиска ведёт в чат сообщества', () =
   assert.match(code, /Поиск рецептов/);
   assert.match(code, /write-243405772/);
   assert.doesNotMatch(code, /54901511/);
-  assert.match(failText({ error_code: 15 }), /VK_WIDGET_TOKEN/);
+  assert.match(failText({ error_code: 15 }), /Поставить на страницу/);
 });
