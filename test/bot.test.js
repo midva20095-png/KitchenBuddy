@@ -242,7 +242,7 @@ test('рецепт из базы находится только в своём �
 
   await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 1 });
   assert.equal(calls, 0);
-  assert.match(sent.at(-1), /само по себе/);
+  assert.match(sent.at(-1), /Напишите блюдо/);
 
   await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 2 });
   assert.equal(calls, 1);

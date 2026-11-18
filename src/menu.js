@@ -177,10 +177,9 @@ function sectionKeyboard(id) {
 function sectionText(id) {
   const node = NODES[id];
   if (!node) return 'Такого раздела нет.';
-  const wait = node.children
-    ? 'Выберите подраздел и напишите блюдо целиком, например «гороховый суп на 4». Кнопка раздела сама рецепт не открывает.'
-    : 'Напишите блюдо целиком: «куриный суп с лапшой» или «гороховый на 4». Слово раздела само по себе рецепт не открывает.';
-  return [`${node.title}.`, node.brief, '', wait].join('\n');
+  const ask = node.children ? 'Выберите подраздел или напишите блюдо.' : 'Напишите блюдо, например «борщ на 4».';
+  const caution = /не лечебн|не медицин/.test(node.brief || '') ? node.brief : '';
+  return [`${node.title}.`, ask, caution].filter(Boolean).join('\n');
 }
 
 function sectionIds() {

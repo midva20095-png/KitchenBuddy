@@ -147,7 +147,7 @@ test('раздел кондитера собирает рецепт и допи�
   const cake = turn(pastry.user, { payload: { a: 'make', s: 'cake' } }, ctx);
   assert.equal(cake.job, null);
   assert.equal(cake.user.mode, 'section');
-  assert.match(cake.messages[0].text, /само по себе/);
+  assert.match(cake.messages[0].text, /Напишите блюдо/);
 
   const named = turn(cake.user, { text: 'торты' }, ctx);
   assert.equal(named.job, null);
@@ -194,7 +194,7 @@ test('меню по разделам, справка и свой рецепт', 
 
   const help = turn(blankUser('1'), { text: 'Справка' }, ctx);
   assert.match(help.messages[0].text, /Список покупок/);
-  assert.match(help.messages[0].text, /не оплата/);
+  assert.match(help.messages[0].text, /борщ на 6/);
 
   const missing = turn(blankUser('1'), { payload: { a: 'share' } }, ctx);
   assert.equal(missing.share, undefined);

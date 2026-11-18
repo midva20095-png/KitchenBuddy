@@ -20,7 +20,7 @@ test('рецепт собирается из JSON и печатается кар
   const priced = parseRecipe('{"title":"Борщ","ingredients":["свекла"],"steps":["Варите"],"shop":["свекла 500 г — около 40 ₽"],"total":"около 40 ₽","tip":""}');
   assert.match(formatRecipe(priced), /Магните/);
   assert.match(formatRecipe(priced), /около 40 ₽/);
-  assert.match(formatShopping(priced), /не оплата/);
+  assert.match(formatShopping(priced), /примерные/);
   assert.doesNotMatch(text, /\*\*|access_token/);
   assert.match(formatShopping(recipe), /Список покупок — Борщ/);
   assert.match(formatStep(recipe, 1), /шаг 2 из 2/);

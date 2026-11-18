@@ -119,7 +119,7 @@ function formatRecipe(recipe) {
   if (recipe.shop && recipe.shop.length) {
     lines.push('', 'Покупки, примерно в «Магните» или «Пятёрочке»:');
     recipe.shop.forEach(item => lines.push(`• ${item}`));
-    if (recipe.total) lines.push(`Итого ${recipe.total}. Это ориентир, не ценник магазина.`);
+    if (recipe.total) lines.push(`Итого ${recipe.total}.`);
   }
   if (recipe.tip) lines.push('', `Совет: ${recipe.tip}`);
   return clip(lines.join('\n'), 3500);
@@ -131,7 +131,7 @@ function formatShopping(recipe) {
   if (!rows || !rows.length) return `Для «${recipe.title}» отдельные продукты не указаны.`;
   rows.forEach(item => lines.push(`• ${item}`));
   if (recipe.total) lines.push('', `Итого ${recipe.total}.`);
-  lines.push('', 'Цены примерные, для «Магнита» или «Пятёрочки». Соль, масло и базовые специи проверьте по дому. Это не оплата и не заказ.');
+  lines.push('', 'Цены примерные, «Магнит» или «Пятёрочка».');
   return clip(lines.join('\n'), 3500);
 }
 
