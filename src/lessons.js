@@ -47,4 +47,39 @@ function matchLesson(query, lessons) {
   return null;
 }
 
-module.exports = { loadLessons, matchLesson };
+function postWords(post) {
+  const parts = [post && post.text];
+  const attachments = (post && post.attachments) || [];
+  for (const item of attachments) {
+    if (item && item.video && item.video.title) parts.push(item.video.title);
+    if (item && item.link && item.link.title) parts.push(item.link.title);
+  }
+  const copy = post && Array.isArray(post.copy_history) ? post.copy_history[0] : null;
+  if (copy && copy.text) parts.push(copy.text);
+  return parts.filter(Boolean).join('\n').replace(/\s+/g, ' ').trim();
+}
+
+function postsToLessons(posts, groupId) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (!id) return [];
+  const lessons = [];
+  const seen = new Set();
+  for (const post of posts || []) {
+    if (!post || !post.id) continue;
+    const text = postWords(post);
+    if (text.length < 8) continue;
+    const title = text.split(/[.!\n]/)[0].trim().slice(0, 80);
+    if (title.length < 4 || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    const lesson = /мастер|урок|обучен/.test(text.toLowerCase());
+    lessons.push({
+      title,
+      url: `https://vk.ru/wall-${id}_${post.id}`,
+      kind: lesson ? 'masterclass' : 'recipe',
+      keys: text.slice(0, 400)
+    });
+  }
+  return lessons;
+}
+
+module.exports = { loadLessons, matchLesson, postsToLessons };

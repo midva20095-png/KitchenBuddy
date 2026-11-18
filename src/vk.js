@@ -139,6 +139,24 @@ function createVk(options) {
       await this.call('messages.setActivity', { peer_id: String(peerId), type: 'typing' });
     },
 
+    async wallPosts(groupId) {
+      const id = String(groupId || '').replace(/\D/g, '');
+      if (!id) return [];
+      const posts = [];
+      for (const offset of [0, 100]) {
+        const response = await this.call('wall.get', {
+          owner_id: `-${id}`,
+          count: '100',
+          offset: String(offset),
+          filter: 'owner'
+        });
+        const items = response && Array.isArray(response.items) ? response.items : [];
+        posts.push(...items);
+        if (items.length < 100) break;
+      }
+      return posts;
+    },
+
     async post(text) {
       const groupId = this.groupId;
       const response = await this.call('wall.post', {

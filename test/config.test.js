@@ -29,6 +29,9 @@ test('настройки читают числа и не тащат секрет
   assert.equal(config.chatReplies, true);
   assert.equal(config.wallHourLimit, 0);
   assert.equal(config.subscribersOnly, true);
+  assert.equal(config.sourceGroupId, '213938339');
+  assert.equal(loadConfig({ SOURCE_GROUP_ID: 'club213938339' }).sourceGroupId, '213938339');
+  assert.equal(loadConfig({ SOURCE_GROUP_ID: '0' }).sourceGroupId, '');
   assert.equal(loadConfig({ SUBSCRIBERS_ONLY: '0' }).subscribersOnly, false);
   assert.equal(Object.hasOwn(config, 'gigaKey'), false);
   const broken = loadConfig({

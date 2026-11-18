@@ -9,6 +9,12 @@ function nonNegative(value, fallback) {
   return n;
 }
 
+function sourceGroup(value) {
+  if (value == null || String(value).trim() === '') return '213938339';
+  const id = String(value).replace(/\D/g, '');
+  return id && id !== '0' ? id : '';
+}
+
 function flag(value, fallback) {
   if (value == null || String(value).trim() === '') return fallback;
   return String(value) !== '0';
@@ -32,6 +38,7 @@ function loadConfig(env) {
     wallHourLimit: nonNegative(source.WALL_HOUR_LIMIT, 30),
     subscribersOnly: flag(source.SUBSCRIBERS_ONLY, true),
     aiParallel: Math.min(4, Math.max(1, Number(source.AI_PARALLEL) || 2)),
+    sourceGroupId: sourceGroup(source.SOURCE_GROUP_ID),
     dataDir: path.resolve(String(source.DATA_DIR || path.join(process.cwd(), 'data'))),
     adminPassword: String(source.ADMIN_PASSWORD || '').trim()
   };

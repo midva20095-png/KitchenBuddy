@@ -4,7 +4,7 @@ require('dotenv').config();
 
 const path = require('path');
 const { loadConfig } = require('./src/config');
-const { loadLessons } = require('./src/lessons');
+const { loadLessons, postsToLessons } = require('./src/lessons');
 const { createStore } = require('./src/store');
 const { createClients } = require('./src/clients');
 const { createGigaChat } = require('./src/gigachat');
@@ -25,7 +25,22 @@ const state = {
 
 const giga = createGigaChat({ env: process.env });
 const vk = config.token ? createVk({ token: config.token, groupId: config.groupId }) : null;
-const lessons = loadLessons(path.join(config.dataDir, 'lessons.json'));
+const fileLessons = loadLessons(path.join(config.dataDir, 'lessons.json'));
+const lessons = fileLessons.slice();
+
+async function refreshSource() {
+  if (!vk || !config.sourceGroupId) return;
+  try {
+    const posts = await vk.wallPosts(config.sourceGroupId);
+    const fresh = postsToLessons(posts, config.sourceGroupId);
+    const next = fileLessons.concat(fresh);
+    lessons.splice(0, lessons.length, ...next);
+    console.log(`Каталог «Баба Яга» ${config.sourceGroupId}: записей ${fresh.length}. В чат этого сообщества бот не подключается.`);
+  } catch (error) {
+    const code = error && error.code ? ` (${error.code})` : '';
+    console.error(`Каталог «Баба Яга» не прочитался${code}. Бот в том сообществе не запускается.`);
+  }
+}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -85,6 +100,8 @@ const holder = { store: null };
 const server = startServer({ config, state, holder });
 console.log(`Кухонный помощник слушает порт ${config.port}.`);
 if (!config.gigaConfigured) console.log('GIGACHAT_AUTH_KEY не задан. Рецепты появятся, когда ключ будет в переменных.');
+refreshSource();
+setInterval(refreshSource, 30 * 60 * 1000);
 openStore().then(store => {
   holder.store = store;
   startBot(store);
