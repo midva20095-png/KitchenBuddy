@@ -68,7 +68,7 @@ test('ключ уходит в метод, а клавиатура снимае�
   };
   await vk.enable();
   assert.ok(sent.some(item => item.url.endsWith('/groups.edit')));
-  assert.ok(sent.some(item => item.url.endsWith('/groups.setLongPollSettings') && item.params.message_new === '1'));
+  assert.ok(sent.some(item => item.url.endsWith('/groups.setLongPollSettings') && item.params.message_new === '1' && item.params.wall_post_new === '1'));
   assert.equal(settingsFailed, false);
   await vk.comment({ postId: 9, commentId: 4, replyTo: 4 }, 'Начните с бульона');
   const comment = sent.find(item => item.url.endsWith('/wall.createComment'));

@@ -7,6 +7,7 @@ const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
 const { wallWorthy } = require('./incoming');
 const { withPromo } = require('./promo');
+const { withChatLink } = require('./postlink');
 const { formatRecipe } = require('./recipe');
 const { sectionGuess } = require('./menu');
 
@@ -139,7 +140,7 @@ function createBot(options) {
     }
     let postId = '';
     try {
-      postId = await options.post(withPromo(item.body));
+      postId = await options.post(withChatLink(withPromo(item.body), config.groupId));
     } catch (error) {
       console.error('Рецепт не выложился на стену.');
       return deliver(peer, [{ text: 'Не выложила на стену. Текст рецепта остался в переписке, его можно переслать.', keyboard: menuKeyboard() }]);

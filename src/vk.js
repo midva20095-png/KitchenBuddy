@@ -193,6 +193,16 @@ function createVk(options) {
       return items;
     },
 
+    async editPost(postId, text, attachments) {
+      const params = {
+        owner_id: String(-Number(this.groupId)),
+        post_id: String(postId),
+        message: String(text || '').slice(0, 16000)
+      };
+      if (attachments) params.attachments = String(attachments);
+      await this.call('wall.edit', params);
+    },
+
     async post(text) {
       const groupId = this.groupId;
       const response = await this.call('wall.post', {
@@ -235,7 +245,8 @@ function createVk(options) {
           api_version: this.version,
           message_new: '1',
           message_event: '1',
-          wall_reply_new: '1'
+          wall_reply_new: '1',
+          wall_post_new: '1'
         });
       } catch (error) {}
     }

@@ -91,7 +91,13 @@ function startBot(store) {
     console.log('VK_GROUP_TOKEN не задан. HTTP жив, к сообществу не подключаюсь.');
     return;
   }
-  startPoll({ vk, bot, config, state }).catch(error => {
+  startPoll({
+    vk,
+    bot,
+    config,
+    state,
+    editPost: (postId, text, attachments) => vk.editPost(postId, text, attachments)
+  }).catch(error => {
     console.error('ВК остановился.');
     state.vkOnline = false;
     state.vkHint = error && error.message ? 'Нет связи с ВКонтакте.' : 'Нет связи с ВКонтакте.';

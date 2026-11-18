@@ -2,6 +2,7 @@
 
 const { connectHint } = require('./vk');
 const { readUpdate } = require('./incoming');
+const { readWallPost, withChatLink } = require('./postlink');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -59,6 +60,16 @@ async function startPoll(options) {
         server = packet.server || server;
         const updates = Array.isArray(packet.updates) ? packet.updates : [];
         for (const update of updates) {
+          const posted = readWallPost(update, vk.groupId);
+          if (posted) {
+            const next = withChatLink(posted.text, vk.groupId);
+            if (next !== posted.text.trim() && options.editPost) {
+              options.editPost(posted.id, next, posted.attachments).catch(() => {
+                console.error('Ссылку на чат в пост не дописала.');
+              });
+            }
+            continue;
+          }
           const input = read(update, vk.groupId);
           if (!input) continue;
           if (!config.wallReplies && input.place === 'wall') continue;
