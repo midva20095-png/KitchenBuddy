@@ -24,4 +24,22 @@ test('полка не отдаёт чужой рецепт', () => {
   assert.equal(matchCatalog([loose], { category: '', dish: 'сырники' }).title, 'Сырники');
   assert.match(formatCatalog([borscht]), /Борщ/);
   assert.match(formatCatalog([]), /пусто/);
+  assert.match(formatCatalog([borscht]), /названию и по описанию/);
+});
+
+test('поиск идёт по названию и по описанию, название важнее', () => {
+  const named = { category: 'soup', title: 'Борщ', query: 'борщ', body: 'Свекла, капуста и говядина.' };
+  const mentioned = { category: 'soup', title: 'Щи', query: 'щи', body: 'Похож на борщ, но это капуста без свеклы.' };
+  const byText = {
+    category: 'soup',
+    title: 'Сборная мясная',
+    query: 'солянка',
+    recipe: { tip: 'Острая сборная солянка', ingredients: ['колбаса копченая', 'оливки'], steps: ['Варить бульон.'] }
+  };
+
+  assert.equal(matchCatalog([mentioned, named], { category: 'soup', dish: 'борщ' }).title, 'Борщ');
+  assert.equal(matchCatalog([named], { category: 'soup', dish: 'свекла капуста' }).title, 'Борщ');
+  assert.equal(matchCatalog([named], { category: 'cake', dish: 'свекла' }), null);
+  assert.equal(matchCatalog([byText], { category: 'soup', dish: 'колбаса оливки' }).title, 'Сборная мясная');
+  assert.equal(matchCatalog([byText], { category: 'soup', dish: 'паста карбонара' }), null);
 });

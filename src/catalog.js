@@ -35,23 +35,42 @@ function sameShelf(saved, context) {
   return familyIds(context).includes(saved);
 }
 
+function recipeText(row) {
+  const recipe = row && row.recipe && typeof row.recipe === 'object' ? row.recipe : {};
+  const parts = [row && row.body, recipe.tip];
+  if (Array.isArray(recipe.ingredients)) parts.push(recipe.ingredients.join(' '));
+  if (Array.isArray(recipe.steps)) parts.push(recipe.steps.join(' '));
+  return parts.filter(Boolean).join(' ');
+}
+
 function matchCatalog(rows, query) {
   const words = stems((query && (query.dish || query.text)) || '');
   if (!words.length) return null;
   const category = (query && query.category) || '';
   let best = null;
-  let long = 0;
+  let bestScore = -1;
   for (const row of rows || []) {
     if (!row || !sameShelf(row.category || '', category)) continue;
-    const hay = new Set(stems(`${row.title || ''} ${row.query || ''}`));
-    if (!words.every(word => hay.has(word))) continue;
-    const local = words.reduce((max, word) => Math.max(max, word.length), 0);
-    if (!best || local > long) {
+    const name = new Set(stems(`${row.title || ''} ${row.query || ''}`));
+    const about = new Set(stems(recipeText(row)));
+    let nameHits = 0;
+    let aboutHits = 0;
+    let found = true;
+    for (const word of words) {
+      if (name.has(word)) nameHits += 1;
+      else if (about.has(word)) aboutHits += 1;
+      else {
+        found = false;
+        break;
+      }
+    }
+    if (!found) continue;
+    const score = nameHits * 10 + aboutHits;
+    if (!best || score > bestScore) {
       best = row;
-      long = local;
+      bestScore = score;
     }
   }
-  if (!best || long < 4) return null;
   return best;
 }
 
@@ -66,7 +85,7 @@ function formatCatalog(rows) {
     const where = node ? ` · ${node.short || node.title}` : '';
     lines.push(`${index + 1}. ${row.title || 'Рецепт'}${where}`);
   });
-  lines.push('', 'База общая. В разделе бот ищет только рецепты этой полки и соседних подразделов.');
+  lines.push('', 'База общая. Поиск идёт по названию и по описанию, только внутри этой полки и соседних подразделов.');
   return lines.join('\n');
 }
 
