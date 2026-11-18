@@ -1,22 +1,70 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { sectionById } = require('./menu');
+
+const ICON192 = fs.readFileSync(path.join(__dirname, '..', 'assets', 'admin-icon-192.png'));
+const ICON512 = fs.readFileSync(path.join(__dirname, '..', 'assets', 'admin-icon-512.png'));
+const MANIFEST = JSON.stringify({
+  name: 'Админка кухни',
+  short_name: 'Кухня',
+  start_url: '/admin',
+  scope: '/',
+  display: 'standalone',
+  background_color: '#fffaf5',
+  theme_color: '#9a3412',
+  lang: 'ru',
+  icons: [
+    { src: '/admin/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/admin/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }
+  ]
+});
+const SW = `'use strict';
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open('kitchen-admin-1').then(cache => cache.addAll([
+    '/admin',
+    '/admin/manifest.webmanifest',
+    '/admin/icon-192.png',
+    '/admin/icon-512.png'
+  ])));
+  self.skipWaiting();
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/')) return;
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+});
+`;
 
 const PAGE = `<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#9a3412">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Кухня">
+  <link rel="manifest" href="/admin/manifest.webmanifest">
+  <link rel="icon" href="/admin/icon-192.png">
+  <link rel="apple-touch-icon" href="/admin/icon-192.png">
   <title>Админка · Кухонный</title>
   <style>
-    body { margin: 0 auto; max-width: 880px; padding: 20px; font: 16px/1.45 system-ui, sans-serif; background: #fffaf5; color: #1c1917; }
+    body { margin: 0 auto; max-width: 880px; padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); font: 16px/1.45 system-ui, sans-serif; background: #fffaf5; color: #1c1917; }
     h1 { font-size: 1.4rem; margin: 0 0 8px; }
     h2 { font-size: 1.05rem; margin: 0 0 8px; }
     .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; padding: 14px; margin: 12px 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     input, button { font: inherit; }
-    input { flex: 1; min-width: 160px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d6d3d1; }
-    button { border: 0; border-radius: 10px; padding: 10px 14px; background: #9a3412; color: #fff; font-weight: 700; cursor: pointer; }
+    input { flex: 1; min-width: 140px; padding: 12px; border-radius: 10px; border: 1px solid #d6d3d1; }
+    button { border: 0; border-radius: 10px; min-height: 48px; padding: 12px 14px; background: #9a3412; color: #fff; font-weight: 700; cursor: pointer; }
+    .wrap { overflow-x: auto; }
     button.ghost { background: #fff; color: #1c1917; border: 1px solid #d6d3d1; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
     .stat { background: #fff7ed; border-radius: 12px; padding: 10px; }
@@ -31,24 +79,27 @@ const PAGE = `<!doctype html>
 </head>
 <body>
   <h1>Админка кухни</h1>
-  <p class="note" id="lead">Клиенты, рецепты и то, чем поделились.</p>
+  <p class="note" id="lead">Клиенты, общая база и то, чем поделились. На Android это же окно ставится как приложение.</p>
   <div class="card" id="login">
     <div class="row">
-      <input id="pass" type="password" placeholder="Пароль администратора">
+      <input id="pass" type="password" placeholder="Пароль администратора" autocomplete="current-password">
       <button type="button" id="enter">Войти</button>
     </div>
     <p id="err" class="bad"></p>
+    <button type="button" id="install">Поставить на Android</button>
+    <p class="note">В Chrome на телефоне нажмите «Поставить на Android» или меню браузера → «Установить приложение». На экране появится иконка «Кухня».</p>
   </div>
   <div id="app" style="display:none">
-    <div class="row"><button type="button" class="ghost" id="out">Выйти</button></div>
+    <div class="row"><button type="button" class="ghost" id="out">Выйти</button><button type="button" id="install2">Поставить на Android</button></div>
     <div class="card"><h2>Сводка</h2><div class="grid" id="stats"></div><p class="note" id="engine"></p></div>
     <div class="card">
       <h2>Клиенты</h2>
       <div class="row"><input id="q" placeholder="Имя или id"><button type="button" id="find">Найти</button></div>
-      <table><thead><tr><th>Человек</th><th>Сообщения</th><th>Рецепты</th><th>Был</th></tr></thead><tbody id="people"></tbody></table>
+      <div class="wrap"><table><thead><tr><th>Человек</th><th>Сообщения</th><th>Рецепты</th><th>Был</th></tr></thead><tbody id="people"></tbody></table></div>
     </div>
     <div class="card" id="card" style="display:none"></div>
-    <div class="card"><h2>Поделились</h2><table><thead><tr><th>Рецепт</th><th>Кто</th><th>Где</th></tr></thead><tbody id="shared"></tbody></table></div>
+    <div class="card"><h2>Общая база</h2><div class="wrap"><table><thead><tr><th>Рецепт</th><th>Полка</th><th>Откуда</th></tr></thead><tbody id="base"></tbody></table></div></div>
+    <div class="card"><h2>Поделились</h2><div class="wrap"><table><thead><tr><th>Рецепт</th><th>Кто</th><th>Где</th></tr></thead><tbody id="shared"></tbody></table></div></div>
   </div>
   <script>
     let token = sessionStorage.getItem('kb_admin') || '';
@@ -92,6 +143,8 @@ const PAGE = `<!doctype html>
       $('stats').innerHTML = cells.map(item => '<div class="stat"><b>' + item[1] + '</b>' + item[0] + '</div>').join('');
       $('engine').textContent = stats.engine === 'postgres' ? 'Память: PostgreSQL.' : 'Память: файл на сервере. Чтобы карточки переживали деплой, соедините Postgres и переменную DATABASE_URL.';
       await search();
+      const catalog = await api('/api/admin/catalog');
+      $('base').innerHTML = (catalog.rows || []).map(row => '<tr><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.shelf || '') + '</td><td>' + (row.source === 'own' ? 'свой' : 'бот') + '</td></tr>').join('') || '<tr><td colspan="3">В общей базе пока пусто.</td></tr>';
       const shared = await api('/api/admin/shared');
       $('shared').innerHTML = (shared.rows || []).map(row => '<tr><td>' + escapeHtml(row.title) + '</td><td>' + escapeHtml(row.name || row.userId) + '</td><td>' + (row.status === 'posted' ? 'на стене' : 'сохранено') + '</td></tr>').join('') || '<tr><td colspan="3">Пока никто не делился.</td></tr>';
     }
@@ -115,6 +168,22 @@ const PAGE = `<!doctype html>
     function escapeHtml(value) {
       return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     }
+    let installEvent = null;
+    window.addEventListener('beforeinstallprompt', function (event) {
+      event.preventDefault();
+      installEvent = event;
+    });
+    function install() {
+      if (!installEvent) {
+        alert('Откройте админку в Chrome на Android и в меню браузера выберите «Установить приложение».');
+        return;
+      }
+      installEvent.prompt();
+      installEvent = null;
+    }
+    $('install').onclick = install;
+    $('install2').onclick = install;
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
     $('enter').onclick = login;
     $('find').onclick = () => search().catch(error => alert(error.message));
     $('out').onclick = () => { sessionStorage.removeItem('kb_admin'); location.reload(); };
@@ -183,10 +252,30 @@ function createAdmin(options) {
     return holder.store || null;
   }
 
+  function shelf(category) {
+    const node = sectionById(category);
+    return node ? (node.short || node.title) : '';
+  }
+
   async function handle(req, res, url) {
-    if (url.pathname === '/admin' && req.method === 'GET') {
+    if (req.method === 'GET' && url.pathname === '/admin') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(PAGE);
+      return true;
+    }
+    if (req.method === 'GET' && url.pathname === '/admin/manifest.webmanifest') {
+      res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8' });
+      res.end(MANIFEST);
+      return true;
+    }
+    if (req.method === 'GET' && (url.pathname === '/admin/icon-192.png' || url.pathname === '/admin/icon-512.png')) {
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' });
+      res.end(url.pathname.endsWith('512.png') ? ICON512 : ICON192);
+      return true;
+    }
+    if (req.method === 'GET' && url.pathname === '/sw.js') {
+      res.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8' });
+      res.end(SW);
       return true;
     }
     if (!url.pathname.startsWith('/api/admin/')) return false;
@@ -223,6 +312,16 @@ function createAdmin(options) {
         const card = await db.clientCard(url.searchParams.get('id') || '');
         if (!card) send(res, 404, { error: 'Клиент не найден.' });
         else send(res, 200, card);
+      } else if (url.pathname === '/api/admin/catalog') {
+        const rows = db.listCatalog ? await db.listCatalog() : [];
+        send(res, 200, {
+          rows: (rows || []).map(row => ({
+            id: row.id || '',
+            title: row.title || 'Рецепт',
+            shelf: shelf(row.category),
+            source: row.source === 'own' ? 'own' : 'found'
+          }))
+        });
       } else if (url.pathname === '/api/admin/shared') {
         send(res, 200, { rows: await db.listShared() });
       } else if (url.pathname === '/api/admin/block' && req.method === 'POST') {
