@@ -431,11 +431,21 @@ function createClients(connectionString, options) {
   async function setBlocked(userId, blocked) {
     const id = cleanId(userId);
     if (!id) return false;
-    const result = await query(
-      'UPDATE clients SET blocked = $2, updated_at = NOW() WHERE user_id = $1 RETURNING blocked',
-      [id, Boolean(blocked)]
+    const flag = Boolean(blocked);
+    if (flag) {
+      await query(
+        `INSERT INTO clients (user_id, blocked, messages)
+         VALUES ($1, true, 0)
+         ON CONFLICT (user_id) DO UPDATE SET blocked = true, updated_at = NOW()`,
+        [id]
+      );
+      return true;
+    }
+    await query(
+      'UPDATE clients SET blocked = false, updated_at = NOW() WHERE user_id = $1',
+      [id]
     );
-    return Boolean(result.rows[0] && result.rows[0].blocked);
+    return false;
   }
 
   async function listShared() {

@@ -111,13 +111,12 @@ const PAGE = `<!doctype html>
     <div class="row"><button type="button" class="ghost" id="out">Выйти</button><button type="button" id="install2">Поставить на Android</button></div>
     <div class="card"><h2>Сводка</h2><div class="grid" id="stats"></div><p class="note" id="engine"></p></div>
     <div class="card">
-      <h2>Клиенты</h2>
+      <h2>Чёрный список</h2>
       <div class="row">
         <input id="userId" inputmode="numeric" placeholder="id ВК">
-        <input id="userName" placeholder="Имя">
-        <button type="button" id="addUser">Добавить человека</button>
+        <button type="button" id="addBan">В чёрный список</button>
       </div>
-      <p id="userMsg" class="note"></p>
+      <p id="userMsg" class="note">Бот перестанет отвечать этому id. Убрать из списка можно в карточке человека.</p>
       <div class="row"><input id="q" placeholder="Имя или id"><button type="button" id="find">Найти</button></div>
       <div class="wrap"><table><thead><tr><th>Человек</th><th>Сообщения</th><th>Рецепты</th><th>Был</th></tr></thead><tbody id="people"></tbody></table></div>
     </div>
@@ -178,7 +177,7 @@ const PAGE = `<!doctype html>
         ['Были сегодня', stats.activeDay],
         ['Рецепты', stats.recipes],
         ['Поделились', stats.shared],
-        ['Закрыты', stats.blocked]
+        ['В ЧС', stats.blocked]
       ];
       $('stats').innerHTML = cells.map(item => '<div class="stat"><b>' + item[1] + '</b>' + item[0] + '</div>').join('');
       $('engine').textContent = stats.engine === 'postgres' ? 'Память: PostgreSQL.' : 'Память: файл на сервере. Чтобы карточки переживали деплой, соедините Postgres и переменную DATABASE_URL.';
@@ -201,7 +200,7 @@ const PAGE = `<!doctype html>
     }
     async function search() {
       const data = await api('/api/admin/clients?q=' + encodeURIComponent($('q').value || ''));
-      $('people').innerHTML = (data.rows || []).map(row => '<tr><td><a href="#" data-id="' + row.userId + '">' + escapeHtml(row.name || row.username || row.userId) + '</a>' + (row.blocked ? ' · закрыт' : '') + '</td><td>' + row.messages + '</td><td>' + row.recipes + '</td><td>' + when(row.lastSeen) + '</td></tr>').join('') || '<tr><td colspan="4">Пока никого нет. Напишите боту.</td></tr>';
+      $('people').innerHTML = (data.rows || []).map(row => '<tr><td><a href="#" data-id="' + row.userId + '">' + escapeHtml(row.name || row.username || row.userId) + '</a>' + (row.blocked ? ' · в ЧС' : '') + '</td><td>' + row.messages + '</td><td>' + row.recipes + '</td><td>' + when(row.lastSeen) + '</td></tr>').join('') || '<tr><td colspan="4">Пока никого нет. Напишите боту.</td></tr>';
     }
     async function openCard(id) {
       const data = await api('/api/admin/client?id=' + encodeURIComponent(id));
@@ -209,7 +208,7 @@ const PAGE = `<!doctype html>
       const fav = (data.favorites || []).map(escapeHtml).join(', ') || 'пусто';
       const log = (data.log || []).slice(0, 12).map(item => '<li>' + escapeHtml(item.kind) + (item.body ? ': ' + escapeHtml(item.body) : '') + '</li>').join('');
       $('card').style.display = 'block';
-      $('card').innerHTML = '<h2>' + escapeHtml(user.name || user.userId) + '</h2><p class="note">id ' + escapeHtml(user.userId) + (user.username ? ' · ' + escapeHtml(user.username) : '') + '<br>Сообщество: ' + escapeHtml(user.groupId || '—') + '<br>С ' + when(user.createdAt) + ', был ' + when(user.lastSeen) + '</p><p>Избранное: ' + fav + '</p><ul>' + log + '</ul><button type="button" id="block">' + (user.blocked ? 'Открыть бота' : 'Закрыть бота') + '</button>';
+      $('card').innerHTML = '<h2>' + escapeHtml(user.name || user.userId) + '</h2><p class="note">id ' + escapeHtml(user.userId) + (user.username ? ' · ' + escapeHtml(user.username) : '') + (user.blocked ? '<br>В чёрном списке: бот не отвечает.' : '') + '<br>Сообщество: ' + escapeHtml(user.groupId || '—') + '<br>С ' + when(user.createdAt) + ', был ' + when(user.lastSeen) + '</p><p>Избранное: ' + fav + '</p><ul>' + log + '</ul><button type="button" id="block">' + (user.blocked ? 'Убрать из чёрного списка' : 'В чёрный список') + '</button>';
       $('block').onclick = async () => {
         await api('/api/admin/block', { method: 'POST', body: JSON.stringify({ userId: user.userId, blocked: !user.blocked }) });
         await openCard(id);
@@ -236,14 +235,18 @@ const PAGE = `<!doctype html>
     $('install2').onclick = install;
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
     $('enter').onclick = login;
-    async function addUser() {
+    async function addBan() {
       $('userMsg').textContent = '';
+      const userId = ($('userId').value || '').replace(/\D/g, '');
+      if (!userId) {
+        $('userMsg').textContent = 'Напишите id ВК.';
+        return;
+      }
       try {
-        const data = await api('/api/admin/user', { method: 'POST', body: JSON.stringify({ userId: $('userId').value, name: $('userName').value }) });
+        await api('/api/admin/block', { method: 'POST', body: JSON.stringify({ userId: userId, blocked: true }) });
         $('userId').value = '';
-        $('userName').value = '';
-        $('userMsg').textContent = 'Человек добавлен' + (data.name ? ': ' + data.name : '') + '.';
-        await search();
+        $('userMsg').textContent = 'id ' + userId + ' в чёрном списке. Бот ему не отвечает.';
+        await load();
       } catch (error) {
         $('userMsg').textContent = error.message;
       }
@@ -276,7 +279,7 @@ const PAGE = `<!doctype html>
       }
     }
     $('find').onclick = () => search().catch(error => alert(error.message));
-    $('addUser').onclick = () => addUser().catch(error => { $('userMsg').textContent = error.message; });
+    $('addBan').onclick = () => addBan().catch(error => { $('userMsg').textContent = error.message; });
     $('saveRecipe').onclick = () => saveRecipe().catch(error => { $('recipeMsg').textContent = error.message; });
     $('out').onclick = () => { sessionStorage.removeItem('kb_admin'); location.reload(); };
     $('people').onclick = event => {
@@ -463,17 +466,6 @@ function createAdmin(options) {
         const card = await db.clientCard(url.searchParams.get('id') || '');
         if (!card) send(res, 404, { error: 'Клиент не найден.' });
         else send(res, 200, card);
-      } else if (url.pathname === '/api/admin/user' && req.method === 'POST') {
-        const body = await readBody(req);
-        const userId = String(body.userId || '').replace(/\D/g, '').slice(0, 15);
-        const name = String(body.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-        if (!userId) {
-          send(res, 400, { error: 'Напишите id ВК.' });
-        } else {
-          await db.ensureClient(userId, { name }, config.groupId || '', { count: false });
-          if (db.note) await db.note(userId, 'admin', 'Добавлен в админке');
-          send(res, 200, { userId, name });
-        }
       } else if (url.pathname === '/api/admin/recipe' && req.method === 'POST') {
         let raw;
         try {

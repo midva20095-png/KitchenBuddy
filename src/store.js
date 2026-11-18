@@ -328,11 +328,30 @@ function createStore(dir) {
     setBlocked(userId, blocked) {
       const id = String(userId || '').replace(/\D/g, '');
       return enqueue(async () => {
+        if (!id) return false;
         const data = await load();
-        if (!data.cards[id]) return false;
-        data.cards[id].blocked = Boolean(blocked);
+        const flag = Boolean(blocked);
+        if (!data.cards[id]) {
+          if (!flag) return false;
+          const now = new Date().toISOString();
+          data.cards[id] = {
+            userId: id,
+            name: '',
+            username: '',
+            photo: '',
+            blocked: true,
+            messages: 0,
+            recipes: 0,
+            groupId: '',
+            createdAt: now,
+            lastSeen: now,
+            log: []
+          };
+        } else {
+          data.cards[id].blocked = flag;
+        }
         await persist();
-        return data.cards[id].blocked;
+        return Boolean(data.cards[id].blocked);
       });
     },
     listShared() {

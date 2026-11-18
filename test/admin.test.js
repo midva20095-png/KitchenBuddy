@@ -114,12 +114,15 @@ test('админка показывает клиентов и не отдаёт 
     assert.equal(JSON.parse(shared.body).rows[0].title, 'Сырники');
     const block = await call(port, 'POST', '/api/admin/block', { userId: '15', blocked: true }, token);
     assert.equal(JSON.parse(block.body).blocked, true);
-    assert.match(admin.body, /Добавить человека/);
+    assert.match(admin.body, /В чёрный список/);
+    assert.doesNotMatch(admin.body, /Добавить человека/);
     assert.match(admin.body, /Рецепт с фото/);
-    const added = await call(port, 'POST', '/api/admin/user', { userId: '4242', name: 'Олег' }, token);
-    assert.equal(added.status, 200);
-    const foundUser = await call(port, 'GET', '/api/admin/clients?q=' + encodeURIComponent('олег'), null, token);
-    assert.equal(JSON.parse(foundUser.body).rows[0].name, 'Олег');
+    const ban = await call(port, 'POST', '/api/admin/block', { userId: '7777', blocked: true }, token);
+    assert.equal(JSON.parse(ban.body).blocked, true);
+    const banned = await call(port, 'GET', '/api/admin/clients?q=7777', null, token);
+    assert.equal(JSON.parse(banned.body).rows[0].blocked, true);
+    const free = await call(port, 'POST', '/api/admin/block', { userId: '7777', blocked: false }, token);
+    assert.equal(JSON.parse(free.body).blocked, false);
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     const boundary = 'kbBound';
     const raw = Buffer.concat([
