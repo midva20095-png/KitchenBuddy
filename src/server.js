@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('http');
+const { createAdmin } = require('./admin');
 
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, char => ({
@@ -36,6 +37,7 @@ function statusHtml(config, state) {
     <dt>ВКонтакте</dt><dd>${online ? 'подключено' : 'нет связи'}${hint ? `. ${hint}` : ''}</dd>
     <dt>GigaChat</dt><dd>${config.gigaConfigured ? 'ключ задан' : 'ключ не задан'}</dd>
     <dt>База клиентов</dt><dd>${escapeHtml((state && state.clients) || 'ещё не открыта')}</dd>
+    <dt>Админка</dt><dd><a href="/admin">/admin</a></dd>
   </dl>
 </body>
 </html>`;
@@ -45,6 +47,7 @@ function startServer(options) {
   const config = options.config;
   const state = options.state || {};
   const port = options.port || config.port;
+  const admin = createAdmin({ config, holder: options.holder || {} });
   const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     if (url.pathname === '/health') {
@@ -53,9 +56,17 @@ function startServer(options) {
       res.end(body);
       return;
     }
-    const body = statusHtml(config, state);
-    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(body);
+    admin.handle(req, res, url).then(done => {
+      if (done) return;
+      const page = statusHtml(config, state);
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(page);
+    }).catch(() => {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('Ошибка');
+      }
+    });
   });
   server.listen(port, '0.0.0.0');
   return server;

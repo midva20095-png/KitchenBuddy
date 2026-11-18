@@ -66,6 +66,7 @@ function startBot(store) {
     member: vk && config.subscribersOnly ? userId => vk.isMember(userId) : null,
     send: (peer, text, keyboard) => (vk ? vk.send(peer, text, keyboard) : Promise.resolve()),
     comment: (input, text) => (vk ? vk.comment(input, text) : Promise.resolve()),
+    post: text => (vk ? vk.post(text) : Promise.reject(new Error('no-vk'))),
     typing: peer => (vk ? vk.typing(peer) : Promise.resolve())
   });
   if (!vk) {
@@ -79,13 +80,19 @@ function startBot(store) {
   });
 }
 
-const server = startServer({ config, state });
+const holder = { store: null };
+const server = startServer({ config, state, holder });
 console.log(`Кухонный помощник слушает порт ${config.port}.`);
 if (!config.gigaConfigured) console.log('GIGACHAT_AUTH_KEY не задан. Рецепты появятся, когда ключ будет в переменных.');
-openStore().then(startBot).catch(error => {
+openStore().then(store => {
+  holder.store = store;
+  startBot(store);
+}).catch(error => {
   console.error('Хранилище не запустилось.');
   state.clients = 'файл: база не открылась';
-  startBot(createStore(config.dataDir));
+  const file = createStore(config.dataDir);
+  holder.store = file;
+  startBot(file);
 });
 
 function shutdown() {

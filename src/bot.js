@@ -110,6 +110,44 @@ function createBot(options) {
     return card;
   }
 
+  async function rememberShare(userId, result) {
+    let saved = null;
+    if (store.saveShared) {
+      try {
+        saved = await store.saveShared(userId, result.share);
+      } catch (error) {
+        console.error('Рецепт для общего доступа не сохранился.');
+      }
+    }
+    result.user.pendingShare = {
+      id: saved && saved.id ? String(saved.id) : '',
+      title: result.share.title,
+      body: result.share.body,
+      source: result.share.source || 'own'
+    };
+  }
+
+  async function publish(peer, userId, item) {
+    if (!item || !item.body) {
+      return deliver(peer, [{ text: 'Нечего публиковать. Откройте рецепт и нажмите «Поделиться».', keyboard: menuKeyboard() }]);
+    }
+    if (!options.post) {
+      return deliver(peer, [{ text: 'Стена сейчас недоступна. Текст рецепта можно переслать из этой переписки.', keyboard: menuKeyboard() }]);
+    }
+    let postId = '';
+    try {
+      postId = await options.post(withPromo(item.body));
+    } catch (error) {
+      console.error('Рецепт не выложился на стену.');
+      return deliver(peer, [{ text: 'Не выложила на стену. Текст рецепта остался в переписке, его можно переслать.', keyboard: menuKeyboard() }]);
+    }
+    if (store.markShared && item.id) {
+      try { await store.markShared(item.id, postId); } catch (error) {}
+    }
+    await journal(userId, 'share', item.title);
+    return deliver(peer, [{ text: 'Рецепт на стене сообщества. Из этой переписки его можно переслать друзьям.', keyboard: menuKeyboard() }]);
+  }
+
   async function journal(userId, kind, body) {
     if (!store.note) return;
     try {
@@ -226,6 +264,8 @@ function createBot(options) {
     if (card.blocked) {
       return deliver(fresh.peerId, [{ text: 'Сейчас бот вам не отвечает.', keyboard: menuKeyboard() }]);
     }
+    if (result.post) return publish(fresh.peerId, userId, result.post);
+    if (result.share) await rememberShare(userId, result);
     if (!result.job) {
       await keep(result.user);
       return deliver(fresh.peerId, result.messages);

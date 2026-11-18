@@ -2,6 +2,10 @@
 
 const {
   menuKeyboard,
+  hubKeyboard,
+  hubText,
+  hubByText,
+  shareKeyboard,
   recipeKeyboard,
   servingsKeyboard,
   minutesKeyboard,
@@ -104,29 +108,42 @@ function welcomeText(name) {
   return [
     `Здравствуйте. Я ${name || 'Кухонный'}, кухонный помощник сообщества.`,
     '',
-    'Разделы: первые и вторые, гарниры, салаты, закуски, завтраки, напитки, выпечка и десерты. Отдельно — кондитеру, без аллергенов и диетическое.',
+    'Напишите блюдо своими словами, например «борщ на 4», или выберите раздел кнопкой.',
     '',
-    'Напишите блюдо своими словами или выберите кнопку внизу.'
+    'Обед — супы, вторые, салаты, закуски и гарниры.',
+    'Завтрак — каши, яичница и напитки.',
+    'Сладкое — выпечка, десерты и кондитер.',
+    'Подбор — из продуктов дома, быстрый ужин, случайное блюдо, без аллергенов и диета.',
+    'Мои рецепты — избранное, свой рецепт и кнопка, чтобы поделиться.',
+    'Справка — что делает каждая кнопка.'
   ].join('\n');
 }
 
 function helpText(communityName) {
   return [
-    `Как пользоваться помощником «${communityName || 'Кухня'}».`,
+    `Справка помощника «${communityName || 'Кухня'}».`,
     '',
-    'Напишите, например:',
-    '• борщ на 6',
-    '• что приготовить из курицы, риса и сметаны',
-    '• ужин за 20 минут',
-    '• замени сметану',
-    '• на 4 порции',
-    '• по шагам',
-    '• удали 2',
-    '• кондитеру',
-    '• первые',
+    'Как попросить рецепт',
+    'Напишите своими словами: «борщ на 6», «рецепт сырников», «что приготовить из курицы и риса», «ужин за 20 минут».',
+    'К уже открытому рецепту можно написать «замени сметану» или «на 4 порции».',
     '',
-    'В беседе сообщества отвечаю, если в сообщении есть «рецепт», название бота, ответ на моё сообщение или упоминание сообщества.',
-    'Фото не разбираю. Медицинских назначений не даю.'
+    'Кнопки меню',
+    'Обед — первые, вторые, салаты, закуски, гарниры.',
+    'Завтрак — завтраки и напитки.',
+    'Сладкое — выпечка, десерты, торты и пирожные. У кондитера есть свои безаллергенные и диетические подразделы.',
+    'Подбор — «Из того, что есть» готовит из продуктов дома. «Быстрый ужин» укладывается в несколько минут. «Случайное блюдо» предлагает идею. «Без аллергенов» и «Диетическое» — обычная домашняя еда, не назначение врача.',
+    'Мои рецепты — сохранённые рецепты и ваш собственный текст.',
+    '',
+    'Кнопки у рецепта',
+    'В избранное — запомнить рецепт. Потом откройте «Избранное» или напишите «открой 1». «удали 2» убирает второй.',
+    'Список покупок — продукты, которые нужно купить для этого блюда. Это не оплата и не заказ.',
+    'Готовить по шагам — один шаг за раз. «Дальше» показывает следующий.',
+    'Другой рецепт — похожее блюдо, не копия текущего.',
+    'Поделиться — текст рецепта можно переслать. «На стену» публикует его в сообществе.',
+    'Мой рецепт — пришлите свой рецепт одним сообщением: название, продукты и шаги. Бот сохранит его, и его тоже можно выложить на стену.',
+    '',
+    'В беседе отвечаю, если в сообщении есть «рецепт», моё имя, ответ на моё сообщение или упоминание сообщества.',
+    'Фото не разбираю.'
   ].join('\n');
 }
 
@@ -149,20 +166,24 @@ function actionOf(text, payload) {
   if (payload && payload.a) return String(payload.a);
   const value = normalize(text);
   if (!value) return '';
-  if (['начать', 'start', '/start', 'меню', 'назад', 'отмена', 'стоп', 'хватит', 'готово'].includes(value)) return 'menu';
+  if (['начать', 'start', '/start', 'меню', 'в меню', 'назад', 'отмена', 'стоп', 'хватит', 'готово'].includes(value)) return 'menu';
   if (['помощь', 'справка', 'help', '/help'].includes(value)) return 'help';
-  if (['избранное', 'избранные', 'мои рецепты'].includes(value)) return 'favorites';
-  if (['покупки', 'список покупок', 'список'].includes(value)) return 'shop';
-  if (['по шагам', 'шаги', 'шаг', 'сначала'].includes(value)) return 'steps';
+  if (['избранное', 'избранные'].includes(value)) return 'favorites';
+  if (['покупки', 'список покупок', 'что купить', 'список'].includes(value)) return 'shop';
+  if (['по шагам', 'шаги', 'шаг', 'сначала', 'с начала', 'готовить по шагам'].includes(value)) return 'steps';
   if (['дальше', 'далее', 'следующий', 'следующий шаг'].includes(value)) return 'next';
   if (['сохрани', 'в избранное', 'избранное сохранить'].includes(value)) return 'save';
   if (['еще вариант', 'другой вариант', 'другой рецепт'].includes(value)) return 'another';
+  if (['поделиться', 'на стену'].includes(value)) return value === 'на стену' ? 'wall' : 'share';
+  if (['мой рецепт', 'свой рецепт'].includes(value)) return 'myrecipe';
   if (['что приготовить', 'блюдо'].includes(value)) return 'dish';
   if (value === 'рецепт') return 'dish';
   if (['из продуктов', 'из того что есть', 'продукты'].includes(value)) return 'ingredients';
   if (['быстрый ужин', 'быстро'].includes(value)) return 'quick';
   if (['диета', 'по диете', 'ограничение'].includes(value)) return 'diet';
-  if (['случайный', 'случайный рецепт', 'идея'].includes(value)) return 'random';
+  if (['случайный', 'случайный рецепт', 'случайное блюдо', 'идея'].includes(value)) return 'random';
+  if (['из того, что есть', 'из того что есть'].includes(value)) return 'ingredients';
+  if (['диетическое'].includes(value)) return 'diet';
   return '';
 }
 
@@ -182,6 +203,7 @@ function readServings(text) {
   const value = normalize(text);
   let match = value.match(/(?:^|\s)(?:на|для)\s*(\d{1,2})(?:\s*(?:порц|персон|чел)[а-я]*)?/);
   if (!match) match = value.match(/^(\d{1,2})$/);
+  if (!match) match = value.match(/^(\d{1,2})\s*(?:порц|персон|чел)/);
   if (!match) {
     if (value === 'как есть' || value === 'как в рецепте') return 0;
     return null;
@@ -491,9 +513,79 @@ function fromChat(user, text) {
   return jobReply(user, aiJob('chat', { text, recipe: user.lastRecipe }, 'Думаю…'));
 }
 
+function ownTitle(text) {
+  const line = String(text || '').split('\n').map(item => item.trim()).find(Boolean) || 'Мой рецепт';
+  return line.replace(/^(?:рецепт|мой рецепт)\s+/i, '').slice(0, 80) || 'Мой рецепт';
+}
+
+function beginOwn(user) {
+  user.mode = 'own';
+  user.draft = {};
+  return {
+    user,
+    messages: [say('Напишите свой рецепт одним сообщением: название, продукты и как готовить.', backKeyboard())],
+    job: null
+  };
+}
+
+function fromOwn(user, text) {
+  const body = String(text || '').trim();
+  if (body.length < 20) {
+    return {
+      user,
+      messages: [say('Добавьте название, продукты и хотя бы пару шагов. Одним сообщением.', backKeyboard())],
+      job: null
+    };
+  }
+  const title = ownTitle(body);
+  user.mode = 'menu';
+  user.pendingShare = { title, body, source: 'own' };
+  return {
+    user,
+    messages: [say(`Сохранила «${title}».\n\nЕго можно переслать из этой переписки или нажать «На стену» — рецепт появится в сообществе.`, shareKeyboard())],
+    job: null,
+    share: { title, body, source: 'own' }
+  };
+}
+
+function shareCurrent(user) {
+  if (!user.lastRecipe) {
+    return {
+      user,
+      messages: [say('Сначала откройте рецепт. Потом «Поделиться» даст текст для пересылки и кнопку «На стену». Свой текст присылают через «Мой рецепт».', hubKeyboard('mine') || menuKeyboard())],
+      job: null
+    };
+  }
+  const body = formatRecipe(user.lastRecipe);
+  const title = user.lastRecipe.title || 'Рецепт';
+  user.mode = 'menu';
+  user.pendingShare = { title, body, source: 'bot' };
+  return {
+    user,
+    messages: [say(`«${title}» можно переслать из этой переписки.\n\n«На стену» публикует рецепт в сообществе.`, shareKeyboard())],
+    job: null,
+    share: { title, body, source: 'bot' }
+  };
+}
+
+function askWall(user) {
+  if (!user.pendingShare || !user.pendingShare.body) return shareCurrent(user);
+  return { user, messages: [], job: null, post: user.pendingShare };
+}
+
+function openHub(user, id) {
+  const text = hubText(id);
+  const keyboard = hubKeyboard(id);
+  if (!text || !keyboard) return { user, messages: [say('Такого раздела нет.', menuKeyboard())], job: null };
+  user.mode = 'menu';
+  user.draft = {};
+  return { user, messages: [say(text, keyboard)], job: null };
+}
+
 function routeFreeText(user, text) {
   const favorite = favoriteCommand(text);
   if (favorite) return favorite.op === 'delete' ? deleteFavorite(user, favorite.index) : openFavorite(user, favorite.index);
+  if (user.mode === 'own') return fromOwn(user, text);
   if (user.mode === 'dish') return fromDishText(user, text);
   if (user.mode === 'ingredients') return fromIngredientsText(user, text);
   if (user.mode === 'servings') {
@@ -568,7 +660,10 @@ function turn(user, input, ctx) {
   if (payload && payload.a === 'pickdiet') return fromDiet(source, String(payload.d || ''));
   if (payload && payload.a === 'section') return openSection(source, String(payload.s || ''));
   if (payload && payload.a === 'make') return makeSection(source, String(payload.s || ''), '', null);
+  if (payload && payload.a === 'hub') return openHub(source, String(payload.h || ''));
   if (payload && payload.a === 'open') return openFavorite(source, Number(payload.i));
+  const hub = !payload && hubByText(text);
+  if (hub) return openHub(source, hub);
   const action = actionOf(text, payload);
   if (action === 'menu') return menuTurn(source, ctx);
   if (action === 'help') {
@@ -590,6 +685,9 @@ function turn(user, input, ctx) {
   if (action === 'quick') return beginQuick(source);
   if (action === 'diet') return openSection(source, 'diet');
   if (action === 'random') return fromRandom(source);
+  if (action === 'share') return shareCurrent(source);
+  if (action === 'myrecipe') return beginOwn(source);
+  if (action === 'wall') return askWall(source);
   return routeFreeText(source, text);
 }
 

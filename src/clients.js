@@ -37,6 +37,16 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS seen_comments (
     key TEXT PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS shared_recipes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'own',
+    status TEXT NOT NULL DEFAULT 'saved',
+    post_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`
 ];
 
@@ -166,6 +176,160 @@ function createClients(connectionString, options) {
     );
   }
 
+  async function saveShared(userId, share) {
+    const id = cleanId(userId);
+    const result = await query(
+      `INSERT INTO shared_recipes (user_id, title, body, source)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [
+        id || '0',
+        cleanText((share && share.title) || 'Рецепт', 80),
+        String((share && share.body) || '').slice(0, 4000),
+        (share && share.source) === 'bot' ? 'bot' : 'own'
+      ]
+    );
+    return { id: result.rows[0] ? String(result.rows[0].id) : '' };
+  }
+
+  async function markShared(id, postId) {
+    const key = cleanId(id);
+    if (!key) return;
+    await query(
+      `UPDATE shared_recipes SET status = 'posted', post_id = NULLIF($2, '')::bigint WHERE id = $1`,
+      [key, cleanId(postId)]
+    );
+  }
+
+  async function stats() {
+    const result = await query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM clients) AS clients,
+        (SELECT COUNT(*)::int FROM clients WHERE last_seen >= NOW() - INTERVAL '1 day') AS active_day,
+        (SELECT COUNT(*)::int FROM clients WHERE created_at >= NOW() - INTERVAL '1 day') AS new_day,
+        (SELECT COUNT(*)::int FROM clients WHERE blocked) AS blocked,
+        (SELECT COALESCE(SUM(recipes), 0)::int FROM clients) AS recipes,
+        (SELECT COUNT(*)::int FROM shared_recipes) AS shared
+    `);
+    const row = result.rows[0] || {};
+    return {
+      clients: row.clients || 0,
+      activeDay: row.active_day || 0,
+      newDay: row.new_day || 0,
+      blocked: row.blocked || 0,
+      recipes: row.recipes || 0,
+      shared: row.shared || 0,
+      engine: 'postgres'
+    };
+  }
+
+  async function listClients(search) {
+    const result = await query(
+      `SELECT user_id::text AS user_id, COALESCE(name, '') AS name, COALESCE(username, '') AS username,
+              blocked, messages, recipes, created_at, last_seen
+       FROM clients
+       WHERE user_id::text ILIKE $1 OR COALESCE(name, '') ILIKE $1 OR COALESCE(username, '') ILIKE $1
+       ORDER BY last_seen DESC
+       LIMIT 100`,
+      [`%${String(search || '').trim()}%`]
+    );
+    return result.rows.map(row => ({
+      userId: row.user_id,
+      name: row.name,
+      username: row.username,
+      blocked: Boolean(row.blocked),
+      messages: row.messages,
+      recipes: row.recipes,
+      createdAt: row.created_at,
+      lastSeen: row.last_seen
+    }));
+  }
+
+  async function clientCard(userId) {
+    const id = cleanId(userId);
+    if (!id) return null;
+    const card = await query(
+      `SELECT user_id::text AS user_id, COALESCE(name, '') AS name, COALESCE(username, '') AS username,
+              COALESCE(photo, '') AS photo, blocked, messages, recipes, created_at, last_seen
+       FROM clients WHERE user_id = $1`,
+      [id]
+    );
+    if (!card.rows[0]) return null;
+    const groups = await query(
+      'SELECT group_id::text AS group_id FROM client_groups WHERE user_id = $1 ORDER BY seen_at DESC',
+      [id]
+    );
+    const log = await query(
+      `SELECT kind, COALESCE(body, '') AS body, created_at FROM client_log
+       WHERE user_id = $1 ORDER BY id DESC LIMIT 40`,
+      [id]
+    );
+    const state = await query('SELECT body FROM client_state WHERE user_id = $1', [id]);
+    const body = state.rows[0] && state.rows[0].body;
+    const favorites = body && Array.isArray(body.favorites) ? body.favorites.map(item => item.title).filter(Boolean) : [];
+    const shared = await query(
+      `SELECT id::text AS id, title, source, status, COALESCE(post_id::text, '') AS post_id, created_at
+       FROM shared_recipes WHERE user_id = $1 ORDER BY id DESC LIMIT 20`,
+      [id]
+    );
+    const row = card.rows[0];
+    return {
+      user: {
+        userId: row.user_id,
+        name: row.name,
+        username: row.username,
+        photo: row.photo,
+        blocked: Boolean(row.blocked),
+        messages: row.messages,
+        recipes: row.recipes,
+        groupId: groups.rows.map(item => item.group_id).join(','),
+        createdAt: row.created_at,
+        lastSeen: row.last_seen
+      },
+      favorites,
+      log: log.rows.map(item => ({ kind: item.kind, body: item.body, at: item.created_at })),
+      shared: shared.rows.map(item => ({
+        id: item.id,
+        title: item.title,
+        source: item.source,
+        status: item.status,
+        postId: item.post_id,
+        createdAt: item.created_at
+      }))
+    };
+  }
+
+  async function setBlocked(userId, blocked) {
+    const id = cleanId(userId);
+    if (!id) return false;
+    const result = await query(
+      'UPDATE clients SET blocked = $2, updated_at = NOW() WHERE user_id = $1 RETURNING blocked',
+      [id, Boolean(blocked)]
+    );
+    return Boolean(result.rows[0] && result.rows[0].blocked);
+  }
+
+  async function listShared() {
+    const result = await query(
+      `SELECT s.id::text AS id, s.user_id::text AS user_id, COALESCE(c.name, '') AS name,
+              s.title, s.source, s.status, COALESCE(s.post_id::text, '') AS post_id, s.created_at
+       FROM shared_recipes s
+       LEFT JOIN clients c ON c.user_id = s.user_id
+       ORDER BY s.id DESC
+       LIMIT 50`
+    );
+    return result.rows.map(row => ({
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      title: row.title,
+      source: row.source,
+      status: row.status,
+      postId: row.post_id,
+      createdAt: row.created_at
+    }));
+  }
+
   function close() {
     return pool.end();
   }
@@ -179,7 +343,14 @@ function createClients(connectionString, options) {
     ensureClient,
     note,
     hasComment,
-    markComment
+    markComment,
+    saveShared,
+    markShared,
+    stats,
+    listClients,
+    clientCard,
+    setBlocked,
+    listShared
   };
 }
 

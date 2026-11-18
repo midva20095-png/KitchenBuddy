@@ -160,3 +160,27 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(done.messages[0].text, /Точки и линии/);
   assert.doesNotMatch(done.user.history[1].content, /ЯгаГенератор/);
 });
+
+test('меню по разделам, справка и свой рецепт', () => {
+  const meal = turn(blankUser('1'), { payload: { a: 'hub', h: 'meal' } }, ctx);
+  assert.match(meal.messages[0].text, /Обед/);
+  assert.match(labels(meal.messages[0].keyboard).join(' '), /Первые/);
+  assert.match(labels(meal.messages[0].keyboard).join(' '), /Гарниры/);
+
+  const help = turn(blankUser('1'), { text: 'Справка' }, ctx);
+  assert.match(help.messages[0].text, /Список покупок/);
+  assert.match(help.messages[0].text, /не оплата/);
+
+  const missing = turn(blankUser('1'), { payload: { a: 'share' } }, ctx);
+  assert.equal(missing.share, undefined);
+  assert.match(missing.messages[0].text, /Сначала откройте рецепт/);
+
+  let own = turn(blankUser('1'), { text: 'Мой рецепт' }, ctx);
+  assert.equal(own.user.mode, 'own');
+  own = turn(own.user, { text: 'Сырники\nТворог и яйцо\nСмешайте и обжарьте.' }, ctx);
+  assert.equal(own.share.title, 'Сырники');
+  assert.match(labels(own.messages[0].keyboard).join(' '), /На стену/);
+
+  const posted = turn(own.user, { payload: { a: 'wall' } }, ctx);
+  assert.equal(posted.post.title, 'Сырники');
+});

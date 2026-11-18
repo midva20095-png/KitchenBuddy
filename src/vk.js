@@ -139,6 +139,16 @@ function createVk(options) {
       await this.call('messages.setActivity', { peer_id: String(peerId), type: 'typing' });
     },
 
+    async post(text) {
+      const groupId = this.groupId;
+      const response = await this.call('wall.post', {
+        owner_id: String(-Number(groupId)),
+        from_group: '1',
+        message: String(text || '').slice(0, 4000)
+      });
+      return response && response.post_id ? String(response.post_id) : '';
+    },
+
     async comment(input, text) {
       const groupId = this.groupId;
       await this.call('wall.createComment', {

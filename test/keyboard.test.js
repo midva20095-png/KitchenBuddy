@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { menuKeyboard, recipeKeyboard, servingsKeyboard, favoritesKeyboard } = require('../src/keyboard');
+const { menuKeyboard, hubKeyboard, recipeKeyboard, servingsKeyboard, favoritesKeyboard } = require('../src/keyboard');
 const { sectionIds, sectionKeyboard } = require('../src/menu');
 
 function rows(raw) {
@@ -14,7 +14,12 @@ test('клавиатура ВК помещается в лимиты кнопо�
     menuKeyboard(),
     recipeKeyboard({ steps: ['a', 'b'] }),
     servingsKeyboard(),
-    favoritesKeyboard([{ title: 'Очень длинное название домашнего блюда с грибами и сметаной' }])
+    favoritesKeyboard([{ title: 'Очень длинное название домашнего блюда с грибами и сметаной' }]),
+    hubKeyboard('meal'),
+    hubKeyboard('morning'),
+    hubKeyboard('sweetbox'),
+    hubKeyboard('pick'),
+    hubKeyboard('mine')
   ].concat(sectionIds().map(sectionKeyboard).filter(Boolean));
   for (const raw of boards) {
     const buttons = rows(raw);
@@ -30,8 +35,7 @@ test('клавиатура ВК помещается в лимиты кнопо�
     }
   }
   const labels = rows(menuKeyboard()).flat().map(button => button.action.label);
-  assert.deepEqual(labels, [
-    'Первые', 'Вторые', 'Салаты', 'Закуски', 'Завтраки', 'Напитки', 'Выпечка', 'Десерты',
-    'Кондитеру', 'Аллергены', 'Диета', 'Из продуктов', 'Быстрый ужин', 'Случайный', 'Избранное', 'Помощь'
-  ]);
+  assert.deepEqual(labels, ['Обед', 'Завтрак', 'Сладкое', 'Подбор', 'Мои рецепты', 'Справка']);
+  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Список покупок/);
+  assert.match(rows(hubKeyboard('pick')).flat().map(button => button.action.label).join(' '), /Из того, что есть/);
 });
