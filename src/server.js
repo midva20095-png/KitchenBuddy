@@ -35,6 +35,7 @@ function statusHtml(config, state) {
     <dt>Сообщество</dt><dd>${name}, id ${group}</dd>
     <dt>ВКонтакте</dt><dd>${online ? 'подключено' : 'нет связи'}${hint ? `. ${hint}` : ''}</dd>
     <dt>GigaChat</dt><dd>${config.gigaConfigured ? 'ключ задан' : 'ключ не задан'}</dd>
+    <dt>База клиентов</dt><dd>${escapeHtml((state && state.clients) || 'ещё не открыта')}</dd>
   </dl>
 </body>
 </html>`;

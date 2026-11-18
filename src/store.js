@@ -66,6 +66,12 @@ function createStore(dir) {
         if (data.comments.length > 400) data.comments.splice(0, data.comments.length - 400);
         await persist();
       });
+    },
+    ensureClient() {
+      return Promise.resolve({ isNew: false, blocked: false, name: '' });
+    },
+    note() {
+      return Promise.resolve();
     }
   };
 }

@@ -605,9 +605,9 @@ function complete(user, job, raw, ctx) {
   const next = structuredClone(user);
   if (job.kind === 'comment') {
     const text = commentBody(raw, (ctx && ctx.invite) || 'Полный рецепт — в сообщениях сообщества.');
-    if (!text) return { user: next, messages: [], commentText: '' };
+    if (!text) return { user: next, messages: [], commentText: '', recipe: false };
     bumpUsage(next, now, 'comment');
-    return { user: next, messages: [], commentText: shown(text, ctx, job.memory, true) };
+    return { user: next, messages: [], commentText: shown(text, ctx, job.memory, true), recipe: false };
   }
   const recipe = parseRecipe(raw);
   const answer = recipe ? formatRecipe(recipe) : (asPlain(raw) || 'Не разобрала ответ. Напишите запрос ещё раз, можно короче.');
@@ -623,7 +623,8 @@ function complete(user, job, raw, ctx) {
   return {
     user: next,
     messages: [{ text: shown(answer, ctx, job.memory || job.prompt), keyboard }],
-    commentText: ''
+    commentText: '',
+    recipe: Boolean(recipe)
   };
 }
 

@@ -113,6 +113,22 @@ test('лимит, сбой и опасный запрос не светят кл
   await bot.handle({ userId: '3', peerId: 3, photo: true, text: '', place: 'dm', messageId: 4 });
   assert.match(sent.at(-1).text, /Фото/);
   assert.equal(prompts.length, before);
+
+  const closed = createBot({
+    store: Object.assign(createStore(dir), {
+      ensureClient: async () => ({ isNew: false, blocked: true, name: 'Анна' })
+    }),
+    config: { groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: '', dailyLimit: 40, wallHourLimit: 30, aiParallel: 2 },
+    now: () => now,
+    giga: { complete: async () => { prompts.push('closed'); return RECIPE; } },
+    send: async (peer, text) => { sent.push({ text }); },
+    comment: async () => {},
+    typing: async () => {}
+  });
+  const beforeClosed = prompts.length;
+  await closed.handle({ userId: '7', peerId: 7, text: 'борщ на 2', place: 'dm', messageId: 8 });
+  assert.equal(prompts.length, beforeClosed);
+  assert.match(sent.at(-1).text, /не отвечает/);
 });
 
 test('беседа молчит, пока её не попросили, а стена отвечает один раз', async () => {

@@ -90,6 +90,35 @@ function createBot(options) {
     }
   }
 
+  async function openClient(userId) {
+    if (!store.ensureClient) return { isNew: false, blocked: false, name: '' };
+    let card = { isNew: false, blocked: false, name: '' };
+    try {
+      card = await store.ensureClient(userId, null, config.groupId) || card;
+    } catch (error) {
+      console.error('Клиента не записала.');
+      return card;
+    }
+    if (!card.name && options.profile) {
+      try {
+        const face = await options.profile(userId);
+        if (face && face.name) {
+          card = await store.ensureClient(userId, face, config.groupId, { count: false }) || card;
+        }
+      } catch (error) {}
+    }
+    return card;
+  }
+
+  async function journal(userId, kind, body) {
+    if (!store.note) return;
+    try {
+      await store.note(userId, kind, body);
+    } catch (error) {
+      console.error('Запись в журнал клиента не сохранилась.');
+    }
+  }
+
   async function deliver(peer, messages) {
     const out = [];
     for (const message of messages || []) {
@@ -136,6 +165,8 @@ function createBot(options) {
       user = null;
     }
     if (!user) user = blankUser(input.userId);
+    const card = await openClient(input.userId);
+    if (card.blocked) return [];
     if (overLimit(user, config.dailyLimit, now, 'wall')) return [];
     const job = {
       usesAi: true,
@@ -161,6 +192,7 @@ function createBot(options) {
     }
     markWall(now);
     try { await store.markComment(key); } catch (error) {}
+    await journal(input.userId, 'comment', input.text);
     await keep(done.user);
     return [{ text: done.commentText, comment: true }];
   }
@@ -183,11 +215,17 @@ function createBot(options) {
     if (!(await subscriber(userId))) {
       const peek = turn(user, fresh, ctx);
       if (peek.ignore) return [];
+      await openClient(userId);
+      await journal(userId, 'join', '');
       console.log('ВК: не подписчик, отправила ссылку на сообщество.');
       return deliver(fresh.peerId, [{ text: joinText(config), keyboard: menuKeyboard() }]);
     }
     const result = turn(user, fresh, ctx);
     if (result.ignore) return [];
+    const card = await openClient(userId);
+    if (card.blocked) {
+      return deliver(fresh.peerId, [{ text: 'Сейчас бот вам не отвечает.', keyboard: menuKeyboard() }]);
+    }
     if (!result.job) {
       await keep(result.user);
       return deliver(fresh.peerId, result.messages);
@@ -212,6 +250,8 @@ function createBot(options) {
       return prelude.concat(failed);
     }
     const done = complete(result.user, result.job, raw, ctx);
+    const title = done.user.lastRecipe && done.user.lastRecipe.title;
+    await journal(userId, done.recipe ? 'recipe' : 'reply', done.recipe ? title : result.job.memory);
     await keep(done.user);
     const rest = await deliver(fresh.peerId, done.messages);
     return prelude.concat(rest);

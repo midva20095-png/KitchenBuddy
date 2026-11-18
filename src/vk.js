@@ -56,6 +56,25 @@ function createVk(options) {
       return data.response;
     },
 
+    async profile(userId) {
+      const id = String(userId || '').replace(/\D/g, '');
+      if (!id) return null;
+      const response = await this.call('users.get', {
+        user_ids: id,
+        fields: 'screen_name,photo_100',
+        lang: '0'
+      });
+      const user = Array.isArray(response) ? response[0] : null;
+      if (!user) return null;
+      const name = [user.first_name, user.last_name].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      if (!name) return null;
+      return {
+        name: name.slice(0, 80),
+        username: String(user.screen_name || '').slice(0, 64),
+        photo: String(user.photo_100 || '').slice(0, 300)
+      };
+    },
+
     async isMember(userId) {
       const id = String(userId || '').replace(/\D/g, '');
       if (!id || !this.groupId) return true;
