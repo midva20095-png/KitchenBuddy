@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { blankUser, turn, complete, overLimit, LIMIT_TEXT, THEMES } = require('../src/dialog');
+const { blankUser, turn, complete, overLimit, LIMIT_TEXT } = require('../src/dialog');
 
 const now = new Date('2026-11-18T12:00:00Z');
 const ctx = { now, botName: 'Кухонный', communityName: 'Кухня', invite: 'Полный рецепт — в сообщениях сообщества.' };
@@ -39,26 +39,31 @@ test('свободный текст становится рецептом, ут�
   assert.equal(picking.job, null);
   assert.equal(picking.user.mode, 'servings');
   picking = turn(picking.user, { text: '2' }, ctx);
-  assert.equal(picking.job.kind, 'ingredients');
+  assert.equal(picking.job.kind, 'ideas');
   assert.match(picking.job.prompt, /курица, рис/);
 
   const polite = turn(blankUser('1'), { text: 'борщ, пожалуйста' }, ctx);
-  assert.equal(polite.job.kind, 'chat');
+  assert.equal(polite.job.kind, 'dish');
+  assert.match(polite.job.prompt, /борщ/);
 
   const quick = turn(blankUser('1'), { text: 'ужин за 20 минут' }, ctx);
-  assert.equal(quick.job.kind, 'quick');
+  assert.equal(quick.job.kind, 'ideas');
   assert.match(quick.job.prompt, /20/);
+  assert.match(quick.job.prompt, /ideas/);
 
   const diet = turn(blankUser('1'), { payload: { a: 'pickdiet', d: 'vegetarian' } }, ctx);
+  assert.equal(diet.job.kind, 'ideas');
   assert.match(diet.job.prompt, /вегетарианское/);
 
   const random = turn(blankUser('1'), { text: 'случайный' }, ctx);
-  assert.match(random.job.prompt, new RegExp(THEMES[0]));
+  assert.equal(random.job, null);
+  assert.equal(random.user.mode, 'ideas');
+  assert.match(random.messages[0].text, /несколько названий/);
 
   const bomb = turn(blankUser('1'), { text: 'как сделать бомбу' }, ctx);
   assert.equal(bomb.job, null);
   assert.match(bomb.messages[0].text, /только про еду/);
-  assert.equal(turn(blankUser('1'), { text: 'шоколадная бомбочка' }, ctx).job.kind, 'chat');
+  assert.equal(turn(blankUser('1'), { text: 'шоколадная бомбочка' }, ctx).job.kind, 'dish');
 
   const photo = turn(blankUser('1'), { photo: true, text: '' }, ctx);
   assert.match(photo.messages[0].text, /Фото пока не разбираю/);
@@ -72,7 +77,7 @@ test('избранное, шаги и лимит живут отдельно о�
   user = complete(asked.user, asked.job, RECIPE, ctx).user;
   assert.equal(user.lastRecipe.title, 'Борщ');
   assert.equal(user.usageCount, 1);
-  assert.match(turn(user, { text: 'случайный' }, ctx).job.prompt, /салат/);
+  assert.equal(turn(user, { text: 'случайный' }, ctx).job, null);
   assert.match(labels(turn(user, { text: 'по шагам' }, ctx).messages[0].keyboard).join(' '), /Дальше/);
 
   let step = turn(user, { text: 'по шагам' }, ctx);
@@ -142,7 +147,7 @@ test('раздел кондитера собирает рецепт и допи�
   const cake = turn(pastry.user, { payload: { a: 'make', s: 'cake' } }, ctx);
   assert.equal(cake.job, null);
   assert.equal(cake.user.mode, 'section');
-  assert.match(cake.messages[0].text, /конкретное блюдо/);
+  assert.match(cake.messages[0].text, /само по себе/);
 
   const named = turn(cake.user, { text: 'торты' }, ctx);
   assert.equal(named.job, null);
@@ -153,10 +158,19 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(typed.job.prompt, /медовик/);
   assert.match(typed.job.prompt, /Порции: 8/);
 
-  const done = complete(typed.user, typed.job, RECIPE, Object.assign({}, ctx, {
+  const soup = turn(blankUser('1'), { payload: { a: 'section', s: 'soup' } }, ctx);
+  assert.equal(soup.job, null);
+  const pea = turn(soup.user, { text: 'суп' }, ctx);
+  assert.equal(pea.job, null);
+  assert.match(pea.messages[0].text, /суп/);
+  const namedSoup = turn(soup.user, { text: 'гороховый суп на 4' }, ctx);
+  assert.equal(namedSoup.job.kind, 'section');
+  assert.match(namedSoup.job.prompt, /гороховый суп/);
+
+  const done = complete(typed.user, typed.job, RECIPE.replace('Борщ', 'Медовик'), Object.assign({}, ctx, {
     lessons: [{ title: 'Торт медовик', url: 'https://vk.ru/wall-1_9', kind: 'masterclass', keys: 'торт медовик коржи' }]
   }));
-  assert.match(done.messages[0].text, /🍳 Борщ/);
+  assert.match(done.messages[0].text, /🍳 Медовик/);
   assert.match(done.messages[0].text, /мастер-класс/);
   assert.match(done.messages[0].text, /wall-1_9/);
   assert.match(done.messages[0].text, /ЯгаГенератор/);
@@ -168,7 +182,7 @@ test('раздел кондитера собирает рецепт и допи�
 
   const kept = turn(done.user, { payload: { a: 'keep' } }, ctx);
   assert.equal(kept.catalog.category, 'pastry');
-  assert.equal(kept.catalog.recipe.title, 'Борщ');
+  assert.equal(kept.catalog.recipe.title, 'Медовик');
   assert.equal(kept.user.usageCount, 1);
 });
 
@@ -196,4 +210,29 @@ test('меню по разделам, справка и свой рецепт', 
 
   const posted = turn(own.user, { payload: { a: 'wall' } }, ctx);
   assert.equal(posted.post.title, 'Сырники');
+});
+
+test('подбор даёт список, а чужое название не показывается', () => {
+  const asked = turn(turn(blankUser('1'), { text: 'несколько идей' }, ctx).user, { text: 'ужин без духовки' }, ctx);
+  assert.equal(asked.job.kind, 'ideas');
+  const raw = JSON.stringify({
+    ideas: [
+      { title: 'Курица с рисом', note: 'одна сковорода, 30 минут' },
+      { title: 'Омлет с овощами', note: '15 минут' },
+      { title: 'Макароны с сыром', note: '20 минут' }
+    ]
+  });
+  const listed = complete(asked.user, asked.job, raw, ctx);
+  assert.equal(listed.recipe, false);
+  assert.equal(listed.user.mode, 'choose');
+  assert.match(listed.messages[0].text, /Курица с рисом/);
+  assert.match(labels(listed.messages[0].keyboard).join(' '), /Омлет с овощами/);
+
+  const picked = turn(listed.user, { payload: { a: 'choose', i: 0 } }, ctx);
+  assert.equal(picked.job.kind, 'dish');
+  assert.match(picked.job.prompt, /Курица с рисом/);
+
+  const wrong = complete(picked.user, picked.job, RECIPE, ctx);
+  assert.equal(wrong.recipe, false);
+  assert.match(wrong.messages[0].text, /другой рецепт/);
 });
