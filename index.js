@@ -34,23 +34,11 @@ async function refreshSource() {
   const id = config.sourceGroupId;
   try {
     const bundle = await loadPublicCatalog({ groupId: id });
-    const posts = bundle.posts || [];
-    const donut = bundle.donut || [];
     const articles = bundle.articles || [];
-    const videos = bundle.videos || [];
-    const goods = bundle.goods || [];
-    const fresh = collectLessons({
-      posts: posts.concat(donut),
-      articles,
-      videos,
-      albums: bundle.albums,
-      goods,
-      menu: bundle.menu
-    }, id);
+    const fresh = collectLessons({ articles }, id);
     lessons.splice(0, lessons.length, ...fileLessons.concat(fresh));
     const missed = bundle.problems && bundle.problems.length ? ` Не открылись: ${bundle.problems.join(', ')}.` : '';
-    const keys = config.sourceTokenConfigured ? 'Ключи обоих сообществ уже в переменных.' : 'Ключ KitchenBuddy уже в переменных.';
-    console.log(`Каталог «Баба Яга» ${id}: записей ${fresh.length}. Стена ${posts.length}, платные ${donut.length}, статьи ${articles.length}, видео ${videos.length}, товары ${goods.length}.${missed} ${keys} Стену и статьи ВК ключу сообщества не отдаёт, поэтому каталог взят с открытой страницы. В чат «Баба Яга» бот не подключается.`);
+    console.log(`Каталог «Баба Яга» ${id}: статей ${fresh.length}.${missed} Посты, видео и товары не беру. В чат этого сообщества бот не подключается.`);
   } catch (error) {
     const code = error && error.code ? ` (${error.code})` : '';
     console.error(`Каталог «Баба Яга» не прочитался${code}. В чат этого сообщества бот не подключается.`);
