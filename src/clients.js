@@ -63,6 +63,7 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS catalog_user_idx ON catalog_recipes (user_id, id DESC)`,
   `ALTER TABLE clients ADD COLUMN IF NOT EXISTS member BOOLEAN`,
+  `ALTER TABLE clients ADD COLUMN IF NOT EXISTS dm_closed BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo BYTEA`,
   `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT ''`
 ];
@@ -340,6 +341,8 @@ function createClients(connectionString, options) {
         (SELECT COUNT(*)::int FROM clients WHERE blocked) AS blocked,
         (SELECT COUNT(*)::int FROM clients WHERE member IS TRUE) AS members,
         (SELECT COUNT(*)::int FROM clients WHERE member IS FALSE) AS guests,
+        (SELECT COUNT(*)::int FROM clients WHERE dm_closed) AS closed,
+        (SELECT COUNT(*)::int FROM clients WHERE member IS TRUE AND NOT blocked AND NOT dm_closed) AS ready,
         (SELECT COALESCE(SUM(recipes), 0)::int FROM clients) AS recipes,
         (SELECT COUNT(*)::int FROM shared_recipes) AS shared
     `);
@@ -351,6 +354,8 @@ function createClients(connectionString, options) {
       blocked: row.blocked || 0,
       members: row.members || 0,
       guests: row.guests || 0,
+      closed: row.closed || 0,
+      ready: row.ready || 0,
       recipes: row.recipes || 0,
       shared: row.shared || 0,
       engine: 'postgres'
@@ -360,11 +365,11 @@ function createClients(connectionString, options) {
   async function listClients(search) {
     const result = await query(
       `SELECT user_id::text AS user_id, COALESCE(name, '') AS name, COALESCE(username, '') AS username,
-              blocked, member, messages, recipes, created_at, last_seen
+              blocked, member, dm_closed, messages, recipes, created_at, last_seen
        FROM clients
        WHERE user_id::text ILIKE $1 OR COALESCE(name, '') ILIKE $1 OR COALESCE(username, '') ILIKE $1
        ORDER BY last_seen DESC
-       LIMIT 100`,
+       LIMIT 400`,
       [`%${String(search || '').trim()}%`]
     );
     return result.rows.map(row => ({
@@ -372,6 +377,7 @@ function createClients(connectionString, options) {
       name: row.name,
       username: row.username,
       blocked: Boolean(row.blocked),
+      dmClosed: Boolean(row.dm_closed),
       member: row.member === true ? true : row.member === false ? false : null,
       messages: row.messages,
       recipes: row.recipes,
@@ -385,7 +391,7 @@ function createClients(connectionString, options) {
     if (!id) return null;
     const card = await query(
       `SELECT user_id::text AS user_id, COALESCE(name, '') AS name, COALESCE(username, '') AS username,
-              COALESCE(photo, '') AS photo, blocked, messages, recipes, created_at, last_seen
+              COALESCE(photo, '') AS photo, blocked, member, dm_closed, messages, recipes, created_at, last_seen
        FROM clients WHERE user_id = $1`,
       [id]
     );
@@ -415,6 +421,8 @@ function createClients(connectionString, options) {
         username: row.username,
         photo: row.photo,
         blocked: Boolean(row.blocked),
+        dmClosed: Boolean(row.dm_closed),
+        member: row.member === true ? true : row.member === false ? false : null,
         messages: row.messages,
         recipes: row.recipes,
         groupId: groups.rows.map(item => item.group_id).join(','),
@@ -460,6 +468,26 @@ function createClients(connectionString, options) {
     }
     await query(
       'UPDATE clients SET blocked = false, updated_at = NOW() WHERE user_id = $1',
+      [id]
+    );
+    return false;
+  }
+
+  async function setDmClosed(userId, closed) {
+    const id = cleanId(userId);
+    if (!id) return false;
+    const flag = Boolean(closed);
+    if (flag) {
+      await query(
+        `INSERT INTO clients (user_id, dm_closed, messages)
+         VALUES ($1, true, 0)
+         ON CONFLICT (user_id) DO UPDATE SET dm_closed = true, updated_at = NOW()`,
+        [id]
+      );
+      return true;
+    }
+    await query(
+      'UPDATE clients SET dm_closed = false, updated_at = NOW() WHERE user_id = $1',
       [id]
     );
     return false;
@@ -512,6 +540,7 @@ function createClients(connectionString, options) {
     markVisit,
     clientCard,
     setBlocked,
+    setDmClosed,
     listShared
   };
 }

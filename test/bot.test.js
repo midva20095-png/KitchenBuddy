@@ -282,3 +282,32 @@ test('рецепт из базы находится только в своём �
   assert.equal(calls, 2);
   assert.doesNotMatch(sent.at(-1), /Нашла в базе/);
 });
+
+test('закрытая личка выбрасывает человека, а новое сообщение возвращает', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
+  const store = createStore(dir);
+  let closed = true;
+  const bot = createBot({
+    store,
+    config: {
+      groupId: '55', communityName: 'Кухня', botName: 'Кухонный', screenName: '',
+      dailyLimit: 40, wallHourLimit: 30, aiParallel: 2
+    },
+    now: () => now,
+    giga: { complete: async () => RECIPE },
+    send: async () => {
+      if (closed) {
+        closed = false;
+        const error = new Error('privacy');
+        error.code = 901;
+        throw error;
+      }
+    },
+    comment: async () => {},
+    typing: async () => {}
+  });
+  await bot.handle({ userId: '31', peerId: 31, text: 'Начать', place: 'dm', messageId: 1 });
+  assert.equal((await store.listClients('31'))[0].dmClosed, true);
+  await bot.handle({ userId: '31', peerId: 31, text: 'Начать', place: 'dm', messageId: 2 });
+  assert.equal((await store.listClients('31'))[0].dmClosed, false);
+});

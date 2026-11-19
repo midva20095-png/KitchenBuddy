@@ -91,6 +91,8 @@ function startBot(store) {
     console.log('VK_GROUP_TOKEN не задан. HTTP жив, к сообществу не подключаюсь.');
     return;
   }
+  holder.send = (peer, text, keyboard, photo) => vk.send(peer, text, keyboard, photo);
+  holder.member = userId => vk.isMember(userId);
   startPoll({
     vk,
     bot,
@@ -104,7 +106,7 @@ function startBot(store) {
   });
 }
 
-const holder = { store: null };
+const holder = { store: null, send: null, member: null, mailPause: 300 };
 const server = startServer({ config, state, holder });
 console.log(`Кухонный помощник слушает порт ${config.port}.`);
 if (!config.gigaConfigured) console.log('GIGACHAT_AUTH_KEY не задан. Рецепты появятся, когда ключ будет в переменных.');

@@ -94,6 +94,7 @@ function createStore(dir) {
             photo: '',
             blocked: false,
             member: null,
+            dmClosed: false,
             messages: 0,
             recipes: 0,
             groupId: '',
@@ -275,6 +276,8 @@ function createStore(dir) {
           blocked: cards.filter(item => item.blocked).length,
           members: cards.filter(item => item.member === true).length,
           guests: cards.filter(item => item.member === false).length,
+          closed: cards.filter(item => item.dmClosed).length,
+          ready: cards.filter(item => item.member === true && !item.blocked && !item.dmClosed).length,
           recipes: cards.reduce((sum, item) => sum + (item.recipes || 0), 0),
           shared: data.shared.length,
           engine: 'file'
@@ -288,12 +291,13 @@ function createStore(dir) {
         return Object.values(data.cards)
           .filter(item => !needle || `${item.userId} ${item.name} ${item.username}`.toLowerCase().includes(needle))
           .sort((a, b) => String(b.lastSeen).localeCompare(String(a.lastSeen)))
-          .slice(0, 100)
+          .slice(0, 400)
           .map(item => ({
             userId: item.userId,
             name: item.name || '',
             username: item.username || '',
             blocked: Boolean(item.blocked),
+            dmClosed: Boolean(item.dmClosed),
             member: item.member === true ? true : item.member === false ? false : null,
             messages: item.messages || 0,
             recipes: item.recipes || 0,
@@ -317,6 +321,8 @@ function createStore(dir) {
             username: card.username || '',
             photo: card.photo || '',
             blocked: Boolean(card.blocked),
+            dmClosed: Boolean(card.dmClosed),
+            member: card.member === true ? true : card.member === false ? false : null,
             messages: card.messages || 0,
             recipes: card.recipes || 0,
             groupId: card.groupId || '',
@@ -342,6 +348,7 @@ function createStore(dir) {
             username: '',
             photo: '',
             blocked: false,
+            dmClosed: false,
             member,
             messages: 0,
             recipes: 0,
@@ -371,6 +378,7 @@ function createStore(dir) {
             username: '',
             photo: '',
             blocked: true,
+            dmClosed: false,
             member: null,
             messages: 0,
             recipes: 0,
@@ -384,6 +392,18 @@ function createStore(dir) {
         }
         await persist();
         return Boolean(data.cards[id].blocked);
+      });
+    },
+    setDmClosed(userId, closed) {
+      const id = String(userId || '').replace(/\D/g, '');
+      return enqueue(async () => {
+        if (!id) return false;
+        const data = await load();
+        const card = data.cards[id];
+        if (!card) return false;
+        card.dmClosed = Boolean(closed);
+        await persist();
+        return Boolean(card.dmClosed);
       });
     },
     listShared() {

@@ -10,6 +10,7 @@ const { withPromo } = require('./promo');
 const { withChatLink } = require('./postlink');
 const { formatRecipe } = require('./recipe');
 const { sectionGuess } = require('./menu');
+const { messagesClosed } = require('./mail');
 
 const FAIL = 'В базе сейчас нет ответа. Напишите ещё раз через минуту.';
 
@@ -173,12 +174,21 @@ function createBot(options) {
 
   async function deliver(peer, messages) {
     const out = [];
+    const userId = String(peer || '').replace(/\D/g, '');
+    const person = userId && Number(userId) < 2000000000 ? userId : '';
     for (const message of messages || []) {
       try {
         await send(peer, message.text, message.keyboard, message.photo);
         out.push(message);
       } catch (error) {
         const code = error && error.code;
+        if (messagesClosed(error) && person) {
+          console.error('ВК: личка закрыта, выбросила из бота.');
+          if (store.setDmClosed) {
+            try { await store.setDmClosed(person, true); } catch (err) {}
+          }
+          break;
+        }
         console.error(`ВК: ответ не ушёл${code ? ` (${code})` : ''}.`);
       }
     }
@@ -309,6 +319,9 @@ function createBot(options) {
       user = null;
     }
     if (!user) user = blankUser(userId);
+    if (fresh.place === 'dm' && store.setDmClosed) {
+      try { await store.setDmClosed(userId, false); } catch (error) {}
+    }
     const member = await membership(userId);
     await rememberVisit(userId, member);
     if (config.subscribersOnly && member === false) {

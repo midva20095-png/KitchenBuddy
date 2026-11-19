@@ -115,6 +115,9 @@ test('админка показывает клиентов и не отдаёт 
     const block = await call(port, 'POST', '/api/admin/block', { userId: '15', blocked: true }, token);
     assert.equal(JSON.parse(block.body).blocked, true);
     assert.match(admin.body, /Кто зашёл/);
+    assert.match(admin.body, /Подписчики/);
+    assert.match(admin.body, /Рассылка/);
+    assert.match(admin.body, /@keyframes neon/);
     assert.match(admin.body, /В чёрный список/);
     await store.markVisit('15', true);
     const visits = await call(port, 'GET', '/api/admin/clients?q=', null, token);
@@ -127,6 +130,30 @@ test('админка показывает клиентов и не отдаёт 
     assert.equal(JSON.parse(banned.body).rows[0].blocked, true);
     const free = await call(port, 'POST', '/api/admin/block', { userId: '7777', blocked: false }, token);
     assert.equal(JSON.parse(free.body).blocked, false);
+    await store.setBlocked('15', false);
+    await store.ensureClient('16', { name: 'Борис' }, '55');
+    await store.markVisit('16', true);
+    await store.ensureClient('18', { name: 'Тихий' }, '55');
+    await store.markVisit('18', true);
+    await store.setBlocked('18', true);
+    const mailed = [];
+    holder.send = async (peer) => {
+      mailed.push(String(peer));
+      if (String(peer) === '15') {
+        const error = new Error('privacy');
+        error.code = 901;
+        throw error;
+      }
+    };
+    const emptyMail = await call(port, 'POST', '/api/admin/broadcast', { text: '   ' }, token);
+    assert.equal(emptyMail.status, 400);
+    const mail = await call(port, 'POST', '/api/admin/broadcast', { text: 'Новый борщ' }, token);
+    const mailBody = JSON.parse(mail.body);
+    assert.equal(mail.status, 200);
+    assert.equal(mailBody.sent, 1);
+    assert.equal(mailBody.thrown, 1);
+    assert.deepEqual(mailed.slice().sort(), ['15', '16']);
+    assert.equal((await store.listClients('15')).find(row => row.userId === '15').dmClosed, true);
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
     const boundary = 'kbBound';
     const raw = Buffer.concat([
