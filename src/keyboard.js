@@ -23,44 +23,102 @@ function board(rows) {
 
 function menuKeyboard() {
   return board([
+    [textButton('Найти', { a: 'search' }, 'positive')],
     [textButton('Обед', { a: 'hub', h: 'meal' }, 'primary'), textButton('Завтрак', { a: 'hub', h: 'morning' }, 'primary')],
-    [textButton('Сладкое', { a: 'hub', h: 'sweetbox' }, 'primary'), textButton('Подбор', { a: 'hub', h: 'pick' }, 'secondary')],
-    [textButton('Мои рецепты', { a: 'hub', h: 'mine' }, 'positive'), textButton('Справка', { a: 'help' }, 'secondary')]
+    [textButton('Сладкое', { a: 'hub', h: 'sweetbox' }, 'primary'), textButton('Кухни', { a: 'hub', h: 'world' }, 'primary')],
+    [textButton('Диета', { a: 'hub', h: 'dietbox' }, 'primary'), textButton('Профи', { a: 'hub', h: 'pro' }, 'primary')],
+    [textButton('Подбор', { a: 'hub', h: 'pick' }, 'secondary'), textButton('Заготовки', { a: 'hub', h: 'pantry' }, 'secondary')],
+    [textButton('Праздник', { a: 'hub', h: 'feast' }, 'secondary'), textButton('Мои рецепты', { a: 'hub', h: 'mine' }, 'positive')],
+    [textButton('Справка', { a: 'help' }, 'secondary')]
   ]);
+}
+
+function findButton() {
+  return textButton('Найти', { a: 'search' }, 'positive');
 }
 
 function hubKeyboard(id) {
   const menu = textButton('В меню', { a: 'menu' }, 'secondary');
+  const find = findButton();
   if (id === 'meal') {
     return board([
       [textButton('Первые', { a: 'section', s: 'first' }, 'primary'), textButton('Вторые', { a: 'section', s: 'second' }, 'primary')],
       [textButton('Салаты', { a: 'section', s: 'salad' }, 'primary'), textButton('Закуски', { a: 'section', s: 'starter' }, 'primary')],
-      [textButton('Гарниры', { a: 'section', s: 'side' }, 'primary'), menu]
+      [textButton('Гарниры', { a: 'section', s: 'side' }, 'primary'), textButton('Соусы', { a: 'section', s: 'homesauce' }, 'primary')],
+      [textButton('Гриль', { a: 'section', s: 'homegrill' }, 'primary'), find],
+      [menu]
     ]);
   }
   if (id === 'morning') {
     return board([
       [textButton('Завтраки', { a: 'section', s: 'breakfast' }, 'primary'), textButton('Напитки', { a: 'section', s: 'drink' }, 'primary')],
+      [textButton('Бранч', { a: 'section', s: 'brunch' }, 'primary'), find],
       [menu]
     ]);
   }
   if (id === 'sweetbox') {
     return board([
       [textButton('Выпечка', { a: 'section', s: 'bake' }, 'primary'), textButton('Десерты', { a: 'section', s: 'sweet' }, 'primary')],
-      [textButton('Кондитеру', { a: 'section', s: 'pastry' }, 'primary'), menu]
+      [textButton('Кондитеру', { a: 'section', s: 'pastry' }, 'primary'), textButton('Мороженое', { a: 'section', s: 'ice' }, 'primary')],
+      [textButton('Конфеты', { a: 'section', s: 'candy' }, 'primary'), find],
+      [menu]
     ]);
   }
   if (id === 'pick') {
     return board([
       [textButton('Из того, что есть', { a: 'ingredients' }, 'positive'), textButton('Быстрый ужин', { a: 'quick' }, 'positive')],
       [textButton('Несколько идей', { a: 'random' }, 'secondary'), textButton('Без аллергенов', { a: 'section', s: 'allergen' }, 'secondary')],
-      [textButton('Диетическое', { a: 'section', s: 'diet' }, 'secondary'), menu]
+      [textButton('Диетическое', { a: 'section', s: 'diet' }, 'secondary'), textButton('Техника', { a: 'section', s: 'gear' }, 'secondary')],
+      [find, menu]
     ]);
   }
   if (id === 'mine') {
     return board([
       [textButton('Избранное', { a: 'favorites' }, 'primary'), textButton('Моя база', { a: 'base' }, 'primary')],
       [textButton('Мой рецепт', { a: 'myrecipe' }, 'positive'), textButton('Поделиться', { a: 'share' }, 'primary')],
+      [find, menu]
+    ]);
+  }
+  if (id === 'world') {
+    return board([
+      [textButton('Русская', { a: 'section', s: 'rus' }, 'primary'), textButton('Кавказ', { a: 'section', s: 'cauc' }, 'primary')],
+      [textButton('Азия', { a: 'section', s: 'asia' }, 'primary'), textButton('Европа', { a: 'section', s: 'eu' }, 'primary')],
+      [textButton('Восток', { a: 'section', s: 'east' }, 'primary'), textButton('Америка', { a: 'section', s: 'amer' }, 'primary')],
+      [textButton('Средиземноморье', { a: 'section', s: 'med' }, 'primary'), find],
+      [menu]
+    ]);
+  }
+  if (id === 'pro') {
+    return board([
+      [textButton('Ресторан', { a: 'section', s: 'restaurant' }, 'primary'), textButton('Банкет', { a: 'section', s: 'banquet' }, 'primary')],
+      [textButton('Соусы цеха', { a: 'section', s: 'sauce' }, 'primary'), textButton('Заготовки цеха', { a: 'section', s: 'prep' }, 'primary')],
+      [textButton('Подача', { a: 'section', s: 'plate' }, 'primary'), textButton('Гриль зала', { a: 'section', s: 'grill' }, 'primary')],
+      [textButton('Кафе', { a: 'section', s: 'cafe' }, 'primary'), textButton('Кондитеру', { a: 'section', s: 'pastry' }, 'primary')],
+      [find, menu]
+    ]);
+  }
+  if (id === 'dietbox') {
+    return board([
+      [textButton('Диетическое', { a: 'section', s: 'diet' }, 'primary'), textButton('Без аллергенов', { a: 'section', s: 'allergen' }, 'secondary')],
+      [textButton('Веганское', { a: 'section', s: 'd-vegan' }, 'primary'), textButton('Постная еда', { a: 'section', s: 'd-lent' }, 'primary')],
+      [textButton('Халяль', { a: 'section', s: 'd-halal' }, 'secondary'), textButton('Полегче', { a: 'section', s: 'd-pp' }, 'secondary')],
+      [find, menu]
+    ]);
+  }
+  if (id === 'pantry') {
+    return board([
+      [textButton('Соленья', { a: 'section', s: 'salt' }, 'primary'), textButton('Варенье', { a: 'section', s: 'jam' }, 'primary')],
+      [textButton('Квашеное', { a: 'section', s: 'ferment' }, 'primary'), textButton('Маринады', { a: 'section', s: 'marinate' }, 'primary')],
+      [textButton('Заморозка', { a: 'section', s: 'freeze' }, 'primary'), textButton('Сушка', { a: 'section', s: 'dry' }, 'primary')],
+      [find, menu]
+    ]);
+  }
+  if (id === 'feast') {
+    return board([
+      [textButton('Новый год', { a: 'section', s: 'ny' }, 'primary'), textButton('Пасха', { a: 'section', s: 'easter' }, 'primary')],
+      [textButton('День рождения', { a: 'section', s: 'birth' }, 'primary'), textButton('Пикник', { a: 'section', s: 'picnic' }, 'primary')],
+      [textButton('Свадьба', { a: 'section', s: 'wedding' }, 'primary'), textButton('Масленица', { a: 'section', s: 'maslen' }, 'primary')],
+      [textButton('Детский праздник', { a: 'section', s: 'kidsfest' }, 'primary'), find],
       [menu]
     ]);
   }
@@ -73,7 +131,12 @@ function hubText(id) {
     morning: 'Завтрак. Напишите блюдо или выберите раздел.',
     sweetbox: 'Сладкое. Напишите блюдо или выберите раздел.',
     pick: 'Подбор. Сначала несколько названий, рецепт после выбора.',
-    mine: 'Мои рецепты.'
+    mine: 'Мои рецепты.',
+    world: 'Кухни мира. Напишите блюдо или выберите кухню.',
+    pro: 'Профессиональная кухня: ресторан, банкет, цех и подача. Продукты обычные.',
+    dietbox: 'Диета. Это бытовые ограничения, не назначение врача. Напишите блюдо или выберите раздел.',
+    pantry: 'Заготовки: соленья, варенье, квашеное, маринады, заморозка и сушка.',
+    feast: 'Праздничный стол. Напишите блюдо или выберите повод.'
   };
   return texts[id] || '';
 }
@@ -85,7 +148,14 @@ function hubByText(text) {
     завтрак: 'morning',
     сладкое: 'sweetbox',
     подбор: 'pick',
-    'мои рецепты': 'mine'
+    'мои рецепты': 'mine',
+    кухни: 'world',
+    'кухни мира': 'world',
+    профи: 'pro',
+    профессиональное: 'pro',
+    диета: 'dietbox',
+    заготовки: 'pantry',
+    праздник: 'feast'
   };
   return map[value] || '';
 }
@@ -109,7 +179,7 @@ function recipeKeyboard(recipe) {
     textButton('Поделиться', { a: 'share' }, 'primary')
   ]);
   rows.push([textButton('Мой рецепт', { a: 'myrecipe' }, 'secondary')]);
-  rows.push([textButton('В меню', { a: 'menu' }, 'secondary')]);
+  rows.push([textButton('Найти', { a: 'search' }, 'positive'), textButton('В меню', { a: 'menu' }, 'secondary')]);
   return board(rows);
 }
 
@@ -183,8 +253,12 @@ function ideaKeyboard(ideas) {
   return board(rows);
 }
 
-function backKeyboard() {
+function searchKeyboard() {
   return board([[textButton('В меню', { a: 'menu' }, 'secondary')]]);
+}
+
+function backKeyboard() {
+  return board([[textButton('Найти', { a: 'search' }, 'positive'), textButton('В меню', { a: 'menu' }, 'secondary')]]);
 }
 
 module.exports = {
@@ -204,5 +278,6 @@ module.exports = {
   catalogKeyboard,
   favoritesKeyboard,
   ideaKeyboard,
-  backKeyboard
+  backKeyboard,
+  searchKeyboard
 };

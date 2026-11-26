@@ -236,3 +236,46 @@ test('подбор даёт список, а чужое название не п
   assert.equal(wrong.recipe, false);
   assert.match(wrong.messages[0].text, /другой рецепт/);
 });
+
+test('поиск без разделов принимает блюдо, тему и продукты', () => {
+  const opened = turn(blankUser('1'), { payload: { a: 'search' } }, ctx);
+  assert.equal(opened.job, null);
+  assert.equal(opened.user.mode, 'search');
+  assert.match(opened.messages[0].text, /без разделов/);
+  assert.equal(turn(blankUser('1'), { text: 'найти' }, ctx).user.mode, 'search');
+
+  const dish = turn(opened.user, { text: 'борщ на 4' }, ctx);
+  assert.equal(dish.job.kind, 'dish');
+  assert.equal(dish.job.data.section, undefined);
+  assert.equal(dish.user.lastCategory, '');
+  assert.match(dish.job.prompt, /борщ/);
+  assert.match(dish.job.prompt, /Порции: 4/);
+
+  const vague = turn(opened.user, { text: 'суп' }, ctx);
+  assert.equal(vague.job.kind, 'ideas');
+  assert.equal(vague.job.data.section, '');
+  assert.match(vague.job.prompt, /суп/);
+
+  const shelf = turn(opened.user, { text: 'супы' }, ctx);
+  assert.equal(shelf.job.kind, 'ideas');
+  assert.notEqual(shelf.user.mode, 'section');
+
+  const products = turn(opened.user, { text: 'курица, рис' }, ctx);
+  assert.equal(products.job.kind, 'ideas');
+  assert.match(products.job.prompt, /курица, рис/);
+
+  const diet = turn(opened.user, { text: 'веганское' }, ctx);
+  assert.equal(diet.job.kind, 'ideas');
+  assert.match(diet.job.prompt, /Веганское/);
+
+  const pro = turn(blankUser('1'), { payload: { a: 'hub', h: 'pro' } }, ctx);
+  assert.match(pro.messages[0].text, /Профессиональн/);
+  assert.match(labels(pro.messages[0].keyboard).join(' '), /Ресторан/);
+  assert.match(labels(pro.messages[0].keyboard).join(' '), /Найти/);
+
+  const kitchens = turn(blankUser('1'), { text: 'кухни' }, ctx);
+  assert.match(kitchens.messages[0].text, /Кухни/);
+  const dietHub = turn(blankUser('1'), { text: 'диета' }, ctx);
+  assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Веганское/);
+  assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Халяль/);
+});

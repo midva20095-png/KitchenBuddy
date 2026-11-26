@@ -13,7 +13,8 @@ const {
   stepsKeyboard,
   favoritesKeyboard,
   ideaKeyboard,
-  backKeyboard
+  backKeyboard,
+  searchKeyboard
 } = require('./keyboard');
 const { buildUserPrompt } = require('./prompt');
 const { parseRecipe, parseIdeas, formatIdeas, titleFits, asPlain, formatRecipe, formatShopping, formatStep, commentBody } = require('./recipe');
@@ -25,6 +26,13 @@ const { matchLesson } = require('./lessons');
 
 const DIETS = {
   vegetarian: 'вегетарианское, без мяса и рыбы',
+  vegan: 'веганское, без мяса, рыбы, яиц и молока',
+  lent: 'постное, без мяса, рыбы, яиц и молочных продуктов',
+  pesc: 'без мяса, рыбу и морепродукты можно',
+  halal: 'халяль: без свинины и алкоголя',
+  kosher: 'без свинины и без смешивания мяса с молоком в одном блюде',
+  raw: 'без плиты и духовки, продукты остаются сырыми',
+  dairyfree: 'без молока и молочных продуктов',
   nosugar: 'без добавленного сахара',
   kids: 'детское, мягкий вкус, без острого и алкоголя',
   budget: 'бюджетное, недорогие продукты',
@@ -34,6 +42,14 @@ const DIETS = {
 
 const DIET_WORDS = [
   ['вегетар', 'vegetarian'],
+  ['веган', 'vegan'],
+  ['пескетар', 'pesc'],
+  ['халял', 'halal'],
+  ['кошерн', 'kosher'],
+  ['сыроед', 'raw'],
+  ['без молока', 'dairyfree'],
+  ['без молоч', 'dairyfree'],
+  ['постн', 'lent'],
   ['без сахара', 'nosugar'],
   ['детск', 'kids'],
   ['бюджет', 'budget'],
@@ -47,7 +63,15 @@ const GENERIC = new Set([
   'выпечка', 'десерт', 'десерты', 'торт', 'торты', 'мясо', 'рыба', 'птица', 'каша', 'каши',
   'обед', 'ужин', 'сладкое', 'рецепт', 'блюдо', 'подбор', 'идея', 'идеи', 'кондитеру',
   'домашний', 'домашняя', 'домашнее', 'простой', 'простая', 'простое', 'обычный', 'обычная',
-  'вкусный', 'вкусная', 'любой', 'любая'
+  'вкусный', 'вкусная', 'любой', 'любая', 'кухни', 'профи', 'заготовки', 'праздник'
+]);
+
+const THEME = new Set([
+  'легкий', 'легкая', 'легкое', 'сытный', 'сытная', 'сытное', 'быстрый', 'быстрая', 'быстрое',
+  'праздничный', 'праздничная', 'домашний', 'домашняя', 'домашнее', 'простой', 'простая', 'простое',
+  'ужин', 'обед', 'перекус', 'полдник', 'сладкий', 'сладкая', 'сладкое', 'чтонибудь', 'любой', 'любая',
+  'вкусный', 'вкусная', 'вкусное', 'диетический', 'диетическая', 'диетическое', 'профессиональный',
+  'профессиональная', 'профессиональное'
 ]);
 
 const FILLER = new Set([
@@ -111,7 +135,8 @@ function helpText() {
   return [
     'Справка.',
     'Напишите блюдо: «борщ на 6», «сырники», «курица и рис».',
-    'Кнопка раздела ждёт название. Слово «суп» рецепт не открывает.',
+    'Кнопка «Найти» ищет без разделов: напишите блюдо, продукты или пожелание.',
+    'Кнопка раздела ждёт название. Слово «суп» само по себе рецепт не открывает, в поиске оно даёт несколько вариантов.',
     'Подбор сначала показывает несколько названий.',
     'Список покупок — продукты и примерная цена.',
     'Готовый рецепт попадает в общую базу.',
@@ -154,10 +179,11 @@ function actionOf(text, payload) {
   if (value === 'рецепт') return 'dish';
   if (['из продуктов', 'из того что есть', 'продукты'].includes(value)) return 'ingredients';
   if (['быстрый ужин', 'быстро'].includes(value)) return 'quick';
-  if (['диета', 'по диете', 'ограничение'].includes(value)) return 'diet';
+  if (['по диете', 'ограничение'].includes(value)) return 'diet';
   if (['случайный', 'случайный рецепт', 'случайное блюдо', 'идея', 'идеи', 'несколько идей'].includes(value)) return 'random';
   if (['из того, что есть', 'из того что есть'].includes(value)) return 'ingredients';
   if (['диетическое'].includes(value)) return 'diet';
+  if (['найти', 'найди', 'поиск', 'поиск рецептов', 'общий поиск', 'найти рецепт'].includes(value)) return 'search';
   return '';
 }
 
@@ -170,7 +196,7 @@ function chatAddressed(input, botName) {
   if (actionOf(input.text, input.payload)) return true;
   const name = normalize(botName);
   if (name && value.includes(name)) return true;
-  return /рецепт|кухн|повар|приготов/.test(value);
+  return /рецепт|кухн|повар|приготов|найди|найти/.test(value);
 }
 
 function readServings(text) {
@@ -196,7 +222,7 @@ function stripServings(text) {
 
 function cleanDish(text) {
   return stripServings(text)
-    .replace(/^(?:рецепт|как приготовить|как сделать)\s+/i, '')
+    .replace(/^(?:рецепт|как приготовить|как сделать|найди|найти|поиск|покажи)\s+/i, '')
     .replace(/[,.!?«»"]/g, ' ')
     .split(/\s+/)
     .filter(word => word && !FILLER.has(normalize(word)))
@@ -523,6 +549,92 @@ function dietFromText(text) {
   return hit ? hit[1] : '';
 }
 
+function dietOnly(text) {
+  const code = dietFromText(text);
+  if (!code) return '';
+  let value = normalize(text);
+  const cuts = [
+    /вегетариан\S*/g, /веганск\S*/g, /пескетариан\S*/g, /халяль\S*/g, /кошерн\S*/g,
+    /сыроед\S*/g, /постн\S*/g, /без сахара/g, /без глютена/g, /без молока/g,
+    /без молоч\S*/g, /детск\S*/g, /бюджет\S*/g, /глютен\S*/g, /белков\S*/g,
+    /больше белка/g, /рецепт/g, /блюдо/g, /еда/g, /кухня/g, /пожалуйста/g
+  ];
+  for (const cut of cuts) value = value.replace(cut, ' ');
+  const words = value.split(/[^a-zа-я0-9]+/).filter(word => {
+    return word.length >= 3 && !GENERIC.has(word) && !FILLER.has(word) && !THEME.has(word);
+  });
+  return words.length ? '' : code;
+}
+
+function searchIsTheme(name) {
+  if (tooVague(name, '')) return true;
+  const words = normalize(name).split(/[^a-zа-я0-9]+/).filter(word => word.length >= 3);
+  if (!words.length) return true;
+  return words.every(word => GENERIC.has(word) || THEME.has(word));
+}
+
+function beginSearch(user) {
+  user.mode = 'search';
+  user.draft = {};
+  user.lastCategory = '';
+  return {
+    user,
+    messages: [say('Общий поиск, без разделов. Напишите блюдо, продукты или пожелание — пришлю рецепт или несколько вариантов.', searchKeyboard())],
+    job: null
+  };
+}
+
+function fromSearch(user, text) {
+  user.lastCategory = '';
+  const quick = wantsQuick(text);
+  if (quick) {
+    return ideasJob(user, { minutes: quick, theme: `блюдо за ${quick} минут`, servings: 2, section: '' });
+  }
+  if (looksLikeIngredients(text)) {
+    const products = stripServings(String(text)
+      .replace(/^что приготовить из\s+/i, '')
+      .replace(/^из\s+/i, '')
+      .replace(/^у меня есть\s+/i, '')
+      .trim());
+    if (normalize(products).length >= 3) {
+      return ideasJob(user, {
+        products,
+        theme: `из продуктов: ${products}`,
+        servings: readServings(text) == null ? 2 : readServings(text),
+        section: ''
+      });
+    }
+  }
+  const alias = sectionAlias(text);
+  const node = alias ? sectionById(alias) : null;
+  const servings = readServings(text) == null ? 2 : readServings(text);
+  if (node) {
+    return ideasJob(user, {
+      theme: node.title,
+      title: node.title,
+      brief: node.brief,
+      servings,
+      section: ''
+    });
+  }
+  const diet = dietOnly(text);
+  const name = cleanDish(text);
+  if (diet && (!dishNameOk(name) || searchIsTheme(name))) {
+    return ideasJob(user, { diet: DIETS[diet], theme: name || DIETS[diet], servings, section: '' });
+  }
+  if (!dishNameOk(name)) {
+    return {
+      user,
+      messages: [say('Напишите, что найти: «борщ», «курица и рис» или «лёгкий ужин».', searchKeyboard())],
+      job: null
+    };
+  }
+  if (searchIsTheme(name)) {
+    return ideasJob(user, { theme: name, diet: diet ? DIETS[diet] : '', servings, section: '' });
+  }
+  return fromDishText(user, text);
+}
+
 function beginIdeas(user) {
   user.mode = 'ideas';
   user.draft = { section: user.lastCategory || '' };
@@ -679,6 +791,7 @@ function openHub(user, id) {
 function routeFreeText(user, text) {
   const favorite = favoriteCommand(text);
   if (favorite) return favorite.op === 'delete' ? deleteFavorite(user, favorite.index) : openFavorite(user, favorite.index);
+  if (user.mode === 'search') return fromSearch(user, text);
   if (user.mode === 'ideas') return fromIdeasText(user, text);
   if (user.mode === 'choose') return fromChoice(user, text);
   if (user.mode === 'own') return fromOwn(user, text);
@@ -769,6 +882,7 @@ function turn(user, input, ctx) {
   if (payload && payload.a === 'make') return openSection(source, String(payload.s || ''));
   if (payload && payload.a === 'choose') return chooseIdea(source, Number(payload.i));
   if (payload && payload.a === 'hub') return openHub(source, String(payload.h || ''));
+  if (payload && payload.a === 'search') return beginSearch(source);
   if (payload && payload.a === 'open') return openFavorite(source, Number(payload.i));
   if (payload && payload.a === 'openbase') {
     const id = String(payload.id || '').replace(/[^\w-]/g, '').slice(0, 40);
@@ -777,7 +891,7 @@ function turn(user, input, ctx) {
     }
     return { user: source, messages: [], job: null, openCatalog: id };
   }
-  const hub = !payload && hubByText(text);
+  const hub = !payload && source.mode !== 'search' && hubByText(text);
   if (hub) return openHub(source, hub);
   const action = actionOf(text, payload);
   if (action === 'menu') return menuTurn(source, ctx);
@@ -809,6 +923,7 @@ function turn(user, input, ctx) {
   if (action === 'quick') return beginQuick(source);
   if (action === 'diet') return openSection(source, 'diet');
   if (action === 'random') return beginIdeas(source);
+  if (action === 'search') return beginSearch(source);
   if (action === 'share') return shareCurrent(source);
   if (action === 'myrecipe') return beginOwn(source);
   if (action === 'wall') return askWall(source);

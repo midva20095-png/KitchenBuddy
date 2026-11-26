@@ -2,8 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { menuKeyboard, hubKeyboard, recipeKeyboard, servingsKeyboard, favoritesKeyboard, catalogKeyboard } = require('../src/keyboard');
-const { sectionIds, sectionKeyboard } = require('../src/menu');
+const { menuKeyboard, hubKeyboard, hubText, recipeKeyboard, servingsKeyboard, favoritesKeyboard, catalogKeyboard } = require('../src/keyboard');
+const { sectionIds, sectionById, sectionKeyboard } = require('../src/menu');
+
+const HUBS = ['meal', 'morning', 'sweetbox', 'pick', 'mine', 'world', 'pro', 'dietbox', 'pantry', 'feast'];
 
 function rows(raw) {
   return JSON.parse(raw).buttons;
@@ -15,11 +17,7 @@ test('клавиатура ВК помещается в лимиты кнопо�
     recipeKeyboard({ steps: ['a', 'b'] }),
     servingsKeyboard(),
     favoritesKeyboard([{ title: 'Очень длинное название домашнего блюда с грибами и сметаной' }]),
-    hubKeyboard('meal'),
-    hubKeyboard('morning'),
-    hubKeyboard('sweetbox'),
-    hubKeyboard('pick'),
-    hubKeyboard('mine'),
+    ...HUBS.map(id => hubKeyboard(id)),
     catalogKeyboard([{ id: '4', title: 'Очень длинное название домашнего блюда с грибами и сметаной' }])
   ].concat(sectionIds().map(sectionKeyboard).filter(Boolean));
   for (const raw of boards) {
@@ -36,7 +34,27 @@ test('клавиатура ВК помещается в лимиты кнопо�
     }
   }
   const labels = rows(menuKeyboard()).flat().map(button => button.action.label);
-  assert.deepEqual(labels, ['Обед', 'Завтрак', 'Сладкое', 'Подбор', 'Мои рецепты', 'Справка']);
+  assert.deepEqual(labels, ['Найти', 'Обед', 'Завтрак', 'Сладкое', 'Кухни', 'Диета', 'Профи', 'Подбор', 'Заготовки', 'Праздник', 'Мои рецепты', 'Справка']);
   assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Список покупок/);
+  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Найти/);
   assert.match(rows(hubKeyboard('pick')).flat().map(button => button.action.label).join(' '), /Из того, что есть/);
+  for (const id of HUBS) {
+    assert.ok(hubKeyboard(id));
+    assert.match(hubText(id), /\S/);
+  }
+});
+
+test('у каждого раздела живые подразделы', () => {
+  const ids = sectionIds();
+  assert.equal(new Set(ids).size, ids.length);
+  for (const id of ids) {
+    const node = sectionById(id);
+    assert.ok(node.title);
+    assert.ok(node.short);
+    assert.ok(node.short.length <= 40);
+    for (const child of node.children || []) {
+      const ref = typeof child === 'string' ? child : child.id;
+      assert.ok(sectionById(ref), `${id} → ${ref}`);
+    }
+  }
 });
