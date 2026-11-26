@@ -91,9 +91,12 @@ function formatIdeas(ideas, topic) {
 }
 
 function titleFits(title, dish) {
-  const skip = new Set(['рецепт', 'блюдо', 'пожалуйста', 'можно', 'хочу', 'нужно', 'давай', 'давайте', 'домашний', 'домашняя', 'простой', 'простая', 'вкусный']);
+  const skip = new Set(['рецепт', 'блюдо', 'пожалуйста', 'можно', 'хочу', 'нужно', 'давай', 'давайте', 'домашний', 'домашняя', 'простой', 'простая', 'вкусный', 'для', 'при', 'про', 'или', 'еще', 'это', 'как', 'что', 'чтобы']);
   const kind = new Set(['торт', 'торта', 'торты', 'тортик', 'пирог', 'пирога', 'пироги', 'кекс', 'кекса', 'десерт', 'выпечка', 'суп', 'супа', 'салат', 'каша']);
-  const words = String(dish || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я0-9]+/).filter(word => word.length >= 3 && !skip.has(word));
+  const wish = /диабет|деобет|диет|болезн|веган|вегетар|постн|халял|кошер|глютен|аллерг|похуд|калор|инсулин|сыроед|пескетар|праздник/;
+  const words = String(dish || '').toLowerCase().replace(/ё/g, 'е').split(/[^a-zа-я0-9]+/).filter(word => {
+    return word.length >= 3 && !skip.has(word) && !wish.test(word);
+  });
   if (!words.length) return true;
   const core = words.filter(word => !kind.has(word));
   const needed = core.length ? core : words;

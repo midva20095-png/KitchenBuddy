@@ -456,6 +456,7 @@ function makeSection(user, id, dish, servings) {
     servings: servings == null ? 0 : servings,
     text: [node.title, name].filter(Boolean).join('. ')
   };
+  if (wishQuery(name)) data.free = true;
   return jobReply(user, aiJob('section', data, SEEK));
 }
 
@@ -502,13 +503,22 @@ function dishNameOk(name) {
   return value.length >= 3 && !['ок', 'окей', 'да', 'нет', 'ага'].includes(value);
 }
 
+function wishQuery(text) {
+  const value = normalize(text);
+  if (!value) return false;
+  if (/для\s+\S+/.test(value)) return true;
+  return /диабет|деобет|диет|болезн|похуд|калор|аллерг|халял|кошер|веган|вегетар|постн|глютен|без сахара|сыроед|пескетар|инсулин/.test(value);
+}
+
 function fromDishText(user, text) {
   const servings = readServings(text);
   const name = cleanDish(text);
   if (!dishNameOk(name)) {
     return { user, messages: [say('Напишите название блюда, например «сырники» или «борщ на 6».', backKeyboard())], job: null };
   }
-  return jobReply(user, aiJob('dish', { dish: name, servings: servings == null ? 0 : servings }, SEEK));
+  const data = { dish: name, servings: servings == null ? 0 : servings };
+  if (wishQuery(text)) data.free = true;
+  return jobReply(user, aiJob('dish', data, SEEK));
 }
 
 function fromIngredientsText(user, text) {
@@ -977,7 +987,8 @@ function complete(user, job, raw, ctx) {
   }
   const recipe = parseRecipe(raw);
   const asked = job.data && String(job.data.dish || '').trim();
-  if (recipe && asked && !titleFits(recipe.title, asked)) {
+  const free = Boolean(job.data && job.data.free);
+  if (recipe && asked && !free && !titleFits(recipe.title, asked)) {
     if (!ctx || !ctx.saved) bumpUsage(next, now, 'dm');
     next.mode = 'menu';
     next.draft = {};
@@ -988,7 +999,10 @@ function complete(user, job, raw, ctx) {
       recipe: false
     };
   }
-  const answer = recipe ? formatRecipe(recipe) : (asPlain(raw) || 'Не разобрала ответ. Напишите запрос ещё раз, можно короче.');
+  let answer = recipe ? formatRecipe(recipe) : (asPlain(raw) || 'Не разобрала ответ. Напишите запрос ещё раз, можно короче.');
+  if (free && /диабет|деобет|болезн|похуд|лечебн|инсулин|давлен|холестер/.test(normalize(asked)) && !/не рекомендация врача|не лечебн/.test(answer)) {
+    answer += '\n\nЭто обычная домашняя еда, не рекомендация врача.';
+  }
   if (recipe) {
     next.lastRecipe = recipe;
     next.stepIndex = 0;

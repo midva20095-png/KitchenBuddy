@@ -31,6 +31,8 @@ test('название торта подходит без лишнего сло�
   assert.equal(titleFits('Торт «Молочная девочка»', 'молочная девочка торт'), true);
   assert.equal(titleFits('Борщ', 'медовик'), false);
   assert.equal(titleFits('Борщ', 'Курица с рисом'), false);
+  assert.equal(titleFits('Гречневая каша', 'для деобетика'), true);
+  assert.equal(titleFits('Борщ', 'борщ для праздника'), true);
 });
 
 test('обычный ответ не превращается в рецепт', () => {

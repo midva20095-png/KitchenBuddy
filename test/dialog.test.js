@@ -279,3 +279,32 @@ test('поиск без разделов принимает блюдо, тему
   assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Веганское/);
   assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Халяль/);
 });
+
+test('пожелание вроде рецепта для диабетика доходит до модели', () => {
+  const opened = turn(blankUser('1'), { payload: { a: 'search' } }, ctx);
+  const asked = turn(opened.user, { text: 'Рецепт для деобетика' }, ctx);
+  assert.equal(asked.job.kind, 'dish');
+  assert.equal(asked.job.data.free, true);
+  assert.match(asked.job.prompt, /Пожелание: для деобетика/);
+  assert.match(asked.job.prompt, /не рекомендация врача/);
+
+  const done = complete(asked.user, asked.job, JSON.stringify({
+    title: 'Гречневая каша',
+    time: '20 минут',
+    servings: '2 порции',
+    ingredients: ['гречка', 'вода'],
+    steps: ['Сварите гречку'],
+    tip: 'Посолите по вкусу.'
+  }), ctx);
+  assert.equal(done.recipe, true);
+  assert.match(done.messages[0].text, /Гречневая каша/);
+  assert.match(done.messages[0].text, /не рекомендация врача/);
+  assert.doesNotMatch(done.messages[0].text, /другой рецепт/);
+
+  const direct = turn(blankUser('1'), { text: 'рецепт для диабетика' }, ctx);
+  assert.equal(direct.job.kind, 'dish');
+  assert.equal(direct.job.data.free, true);
+
+  const named = turn(blankUser('1'), { text: 'борщ на 4' }, ctx);
+  assert.equal(named.job.data.free, undefined);
+});
