@@ -33,7 +33,7 @@ function loadConfig(env) {
     botName: String(source.BOT_NAME || 'Кухонный').trim().slice(0, 40) || 'Кухонный',
     gigaConfigured: Boolean(String(source.GIGACHAT_AUTH_KEY || '').trim()),
     dailyLimit: nonNegative(source.GIGACHAT_DAILY_LIMIT, 40),
-    wallReplies: flag(source.WALL_REPLIES, true),
+    wallReplies: flag(source.WALL_REPLIES, false),
     chatReplies: flag(source.CHAT_REPLIES, true),
     wallHourLimit: nonNegative(source.WALL_HOUR_LIMIT, 30),
     subscribersOnly: flag(source.SUBSCRIBERS_ONLY, true),

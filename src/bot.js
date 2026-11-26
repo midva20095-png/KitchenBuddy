@@ -5,7 +5,6 @@ const { menuKeyboard, hubKeyboard, catalogKeyboard } = require('./keyboard');
 const { formatCatalog } = require('./catalog');
 const { systemPrompt, buildUserPrompt } = require('./prompt');
 const { blockedReason } = require('./guard');
-const { wallWorthy } = require('./incoming');
 const { withPromo } = require('./promo');
 const { withChatLink } = require('./postlink');
 const { formatRecipe } = require('./recipe');
@@ -43,14 +42,12 @@ function createBot(options) {
   const giga = options.giga;
   const config = options.config;
   const send = options.send;
-  const comment = options.comment;
   const typing = options.typing;
   const clock = options.now || (() => new Date());
   const lessons = options.lessons || (config && config.lessons) || [];
   const memberOf = options.member;
   const seen = new Set();
   const tails = new Map();
-  const wallTimes = [];
   let active = 0;
   const waiters = [];
 
@@ -60,18 +57,6 @@ function createBot(options) {
     seen.add(key);
     if (seen.size > 1000) seen.delete(seen.values().next().value);
     return false;
-  }
-
-  function wallRoom(now) {
-    const limit = config.wallHourLimit == null ? 30 : config.wallHourLimit;
-    if (!limit) return true;
-    const cutoff = now.getTime() - 60 * 60 * 1000;
-    while (wallTimes.length && wallTimes[0] < cutoff) wallTimes.shift();
-    return wallTimes.length < limit;
-  }
-
-  function markWall(now) {
-    wallTimes.push(now.getTime());
   }
 
   async function slot(fn) {
@@ -254,54 +239,8 @@ function createBot(options) {
     }
   }
 
-  async function runWall(input, now, ctx) {
-    if (blockedReason(input.text) || !wallWorthy(input.text)) return [];
-    const key = `${config.groupId || '0'}:${input.commentId}`;
-    if (rememberSeen(`c:${key}`)) return [];
-    let known = false;
-    try {
-      known = await store.hasComment(key);
-    } catch (error) {
-      return [];
-    }
-    if (known || !wallRoom(now)) return [];
-    let user = null;
-    try {
-      user = await store.getUser(input.userId);
-    } catch (error) {
-      user = null;
-    }
-    if (!user) user = blankUser(input.userId);
-    const card = await openClient(input.userId);
-    if (card.blocked) return [];
-    if (overLimit(user, config.dailyLimit, now, 'wall')) return [];
-    const job = {
-      usesAi: true,
-      kind: 'comment',
-      prompt: buildUserPrompt('comment', { text: input.text }),
-      memory: input.text
-    };
-    let raw = '';
-    try {
-      raw = await askModel(systemPrompt(config.communityName), [], job.prompt);
-    } catch (error) {
-      console.error('GigaChat не ответил на комментарий.');
-      return [];
-    }
-    const done = complete(user, job, raw, ctx);
-    if (!done.commentText) return [];
-    try {
-      await comment(input, done.commentText);
-    } catch (error) {
-      const code = error && error.code;
-      console.error(`ВК: комментарий не отправился${code ? ` (${code})` : ''}.`);
-      return [];
-    }
-    markWall(now);
-    try { await store.markComment(key); } catch (error) {}
-    await journal(input.userId, 'comment', input.text);
-    await keep(done.user);
-    return [{ text: done.commentText, comment: true }];
+  async function runWall() {
+    return [];
   }
 
   async function run(input) {

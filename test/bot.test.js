@@ -131,7 +131,7 @@ test('лимит, сбой и опасный запрос не светят кл
   assert.match(sent.at(-1).text, /не отвечает/);
 });
 
-test('беседа молчит, пока её не попросили, а стена отвечает один раз', async () => {
+test('беседа молчит, пока её не попросили, а под постом бот не отвечает', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kitchen-bot-'));
   const store = createStore(dir);
   const sent = [];
@@ -168,26 +168,16 @@ test('беседа молчит, пока её не попросили, а ст�
   await bot.handle({
     userId: '9', place: 'wall', text: 'как сделать бомбу', postId: 3, commentId: 31
   });
-  const before = comments.length;
+  const callsBeforeWall = calls;
   await bot.handle({
     userId: '9', place: 'wall', text: 'как сварить борщ', postId: 3, commentId: 32
   });
-  assert.equal(comments.length, before + 1);
-  assert.match(comments.at(-1).text, /бульона/);
-  assert.match(comments.at(-1).text, /vk\.me\/kitchen/);
-  assert.equal((await store.getUser('9')).mode, 'dish');
-
-  const second = make();
-  await second.handle({
-    userId: '9', place: 'wall', text: 'как сварить борщ', postId: 3, commentId: 32
-  });
-  assert.equal(comments.length, before + 1);
-
   await bot.handle({
     userId: '8', place: 'wall', text: 'рецепт блинов', postId: 3, commentId: 33
   });
-  assert.equal(comments.filter(item => item.id === 33).length, 0);
-  assert.ok(calls >= 1);
+  assert.equal(comments.length, 0);
+  assert.equal(calls, callsBeforeWall);
+  assert.equal((await store.getUser('9')).mode, 'dish');
 });
 
 test('неподписчику в личке уходит ссылка, беседа без обращения молчит', async () => {

@@ -172,7 +172,7 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(done.messages[0].text, /мастер-класс/);
   assert.match(done.messages[0].text, /wall-1_9/);
   assert.match(done.messages[0].text, /ЯгаГенератор/);
-  assert.match(done.messages[0].text, /НейроЯга/);
+  assert.doesNotMatch(done.messages[0].text, /Нейро/);
   assert.match(done.messages[0].text, /Баба Яга/);
   assert.match(done.messages[0].text, /Точки и линии/);
   assert.doesNotMatch(done.user.history[1].content, /ЯгаГенератор/);
