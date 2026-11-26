@@ -199,23 +199,6 @@ function createBot(options) {
     }
   }
 
-  async function findSaved(userId, job) {
-    if (!store.findCatalog || !job || !['section', 'dish'].includes(job.kind)) return null;
-    const data = job.data || {};
-    const dish = data.dish || '';
-    if (!dish) return null;
-    try {
-      return await store.findCatalog(userId, {
-        category: job.kind === 'section' ? (data.section || '') : '',
-        dish,
-        text: job.memory
-      });
-    } catch (error) {
-      console.error('Поиск в базе не удался.');
-      return null;
-    }
-  }
-
   async function askModel(system, history, prompt) {
     return slot(() => giga.complete({ system, history, prompt }));
   }
@@ -243,9 +226,31 @@ function createBot(options) {
     return [];
   }
 
+  async function shareLibrary(row) {
+    if (!row || !store.publishLibrary) return;
+    try {
+      await store.publishLibrary(row);
+    } catch (error) {
+      console.error('Общий раздел не сохранился.');
+    }
+  }
+
   async function run(input) {
     const now = clock();
     const ctx = makeCtx(config, now, lessons);
+    ctx.publicSections = true;
+    ctx.library = [];
+    if (store.getSettings) {
+      try {
+        const settings = await store.getSettings();
+        ctx.publicSections = settings.publicSections !== false;
+      } catch (error) {
+        ctx.publicSections = true;
+      }
+    }
+    if (ctx.publicSections && store.library) {
+      try { ctx.library = await store.library(); } catch (error) { ctx.library = []; }
+    }
     const userId = String((input && input.userId) || '').replace(/\D/g, '');
     if (!input || !userId) return [];
     const fresh = Object.assign({}, input, { userId });
@@ -273,6 +278,7 @@ function createBot(options) {
     }
     const result = turn(user, fresh, ctx);
     if (result.ignore) return [];
+    if (result.publish) await shareLibrary(result.publish);
     const card = await openClient(userId);
     if (card.blocked) {
       return deliver(fresh.peerId, [{ text: 'Сейчас бот вам не отвечает.', keyboard: menuKeyboard() }]);
@@ -322,14 +328,6 @@ function createBot(options) {
     const prelude = await deliver(fresh.peerId, result.messages);
     if (typing) {
       try { await typing(fresh.peerId); } catch (error) {}
-    }
-    const found = await findSaved(userId, result.job);
-    if (found) {
-      const done = fromCatalog(result.user, result.job, found, ctx);
-      await journal(userId, 'found', found.title || '');
-      await keep(done.user);
-      const rest = await deliver(fresh.peerId, await attachPhoto(done.messages, found));
-      return prelude.concat(rest);
     }
     let raw = '';
     try {

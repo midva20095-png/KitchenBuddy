@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { blankUser, turn, complete, overLimit, LIMIT_TEXT } = require('../src/dialog');
-const { menuKeyboard } = require('../src/keyboard');
+const { menuKeyboard, usePublicList } = require('../src/keyboard');
 
 const now = new Date('2026-11-18T12:00:00Z');
 const ctx = { now, botName: 'Кухонный', communityName: 'Кухня', invite: 'Полный рецепт — в сообщениях сообщества.' };
@@ -340,4 +340,24 @@ test('кулинарная книга раскладывает рецепты п
   const moved = turn(second.user, { payload: { a: 'put', i: 1, s: made.user.book[0].id } }, ctx);
   assert.equal(moved.user.favorites[1].section, made.user.book[0].id);
   assert.match(moved.messages[0].text, /Омлет/);
+  assert.equal(moved.publish.section, 'Завтраки');
+  assert.equal(moved.publish.title, 'Омлет');
+
+  const hidden = turn(blankUser('2'), { payload: { a: 'public' } }, ctx);
+  assert.match(hidden.messages[0].text, /скрыт/);
+  assert.doesNotMatch(labels(hidden.messages[0].keyboard).join(' '), /Список по разделам/);
+
+  const openCtx = Object.assign({}, ctx, {
+    publicSections: true,
+    library: [{ section: 'Завтраки', recipes: [{ title: 'Сырники', recipe: { title: 'Сырники', ingredients: ['творог'], steps: ['Обжарьте'] } }] }]
+  });
+  const list = turn(blankUser('2'), { payload: { a: 'public' } }, openCtx);
+  assert.match(list.messages[0].text, /Завтраки/);
+  assert.match(labels(list.messages[0].keyboard).join(' '), /Завтраки/);
+  const common = turn(list.user, { payload: { a: 'pubsec', s: 'Завтраки' } }, openCtx);
+  assert.match(labels(common.messages[0].keyboard).join(' '), /Сырники/);
+  const opened = turn(common.user, { payload: { a: 'pubopen', s: 'Завтраки', i: 0 } }, openCtx);
+  assert.match(opened.messages[0].text, /Сырники/);
+  assert.equal(opened.job, null);
+  usePublicList(false);
 });

@@ -19,6 +19,7 @@ test('клавиатура ВК помещается в лимиты кнопо�
     favoritesKeyboard([{ title: 'Очень длинное название домашнего блюда с грибами и сметаной' }]),
     bookKeyboard([{ id: 'b1', title: 'Завтраки' }, { id: 'b2', title: 'Сладкое' }], true),
     putKeyboard([{ id: 'b1', title: 'Завтраки' }], 0),
+    menuKeyboard({ publicSections: true }),
     ...HUBS.map(id => hubKeyboard(id)),
     catalogKeyboard([{ id: '4', title: 'Очень длинное название домашнего блюда с грибами и сметаной' }])
   ].concat(sectionIds().map(sectionKeyboard).filter(Boolean));

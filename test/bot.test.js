@@ -244,17 +244,17 @@ test('рецепт из базы находится только в своём �
 
   await bot.handle({ userId: '21', peerId: 21, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 3 });
   await bot.handle({ userId: '21', peerId: 21, text: 'борщ на 4', place: 'dm', messageId: 4 });
-  assert.equal(calls, 1);
-  assert.match(sent.at(-1), /Нашла в базе/);
+  assert.equal(calls, 2);
+  assert.doesNotMatch(sent.at(-1), /Нашла в базе/);
 
   await bot.handle({ userId: '20', peerId: 20, payload: { a: 'keep' }, place: 'dm', messageId: 5 });
   assert.match(sent.at(-1), /общую базу/);
 
   await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'soup' }, place: 'dm', messageId: 6 });
   await bot.handle({ userId: '20', peerId: 20, text: 'борщ на 4', place: 'dm', messageId: 7 });
-  assert.equal(calls, 1);
-  assert.match(sent.at(-1), /Нашла в базе/);
-  assert.equal((await store.getUser('20')).usageCount, 1);
+  assert.equal(calls, 3);
+  assert.doesNotMatch(sent.at(-1), /Нашла в базе/);
+  assert.equal((await store.getUser('20')).usageCount, 2);
 
   await bot.handle({ userId: '20', peerId: 20, text: 'моя база', place: 'dm', messageId: 8 });
   assert.match(sent.at(-1), /Борщ/);
@@ -264,12 +264,12 @@ test('рецепт из базы находится только в своём �
     .find(payload => payload.a === 'openbase');
   assert.ok(open && open.id);
   await bot.handle({ userId: '20', peerId: 20, text: 'Борщ', payload: open, place: 'dm', messageId: 11 });
-  assert.equal(calls, 1);
+  assert.equal(calls, 3);
   assert.match(sent.at(-1), /Сварите бульон/);
 
   await bot.handle({ userId: '20', peerId: 20, payload: { a: 'section', s: 'cake' }, place: 'dm', messageId: 9 });
   await bot.handle({ userId: '20', peerId: 20, text: 'медовик на 8', place: 'dm', messageId: 10 });
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   assert.doesNotMatch(sent.at(-1), /Нашла в базе/);
 });
 

@@ -10,6 +10,26 @@ function catalogKey() {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function groupLibrary(rows) {
+  const groups = [];
+  const index = new Map();
+  for (const row of rows) {
+    const key = normalize(row.section);
+    if (!key) continue;
+    let group = index.get(key);
+    if (!group) {
+      if (groups.length >= 9) continue;
+      group = { section: row.section, recipes: [] };
+      index.set(key, group);
+      groups.push(group);
+    }
+    if (group.recipes.length >= 8) continue;
+    if (group.recipes.some(item => normalize(item.title) === normalize(row.title))) continue;
+    group.recipes.push({ title: row.title, recipe: row.recipe });
+  }
+  return groups;
+}
+
 function createStore(dir) {
   const file = path.join(dir, 'kitchen.json');
   let chain = Promise.resolve();
@@ -35,6 +55,9 @@ function createStore(dir) {
     if (!memory.cards || typeof memory.cards !== 'object') memory.cards = {};
     if (!Array.isArray(memory.shared)) memory.shared = [];
     if (!Array.isArray(memory.catalog)) memory.catalog = [];
+    if (!memory.settings || typeof memory.settings !== 'object') memory.settings = { publicSections: true };
+    if (typeof memory.settings.publicSections !== 'boolean') memory.settings.publicSections = true;
+    if (!Array.isArray(memory.library)) memory.library = [];
     return memory;
   }
 
@@ -420,8 +443,50 @@ function createStore(dir) {
           createdAt: item.createdAt
         }));
       });
+    },
+    getSettings() {
+      return enqueue(async () => {
+        const data = await load();
+        return { publicSections: data.settings.publicSections !== false };
+      });
+    },
+    setSettings(patch) {
+      return enqueue(async () => {
+        const data = await load();
+        data.settings.publicSections = Boolean(patch && patch.publicSections);
+        await persist();
+        return { publicSections: data.settings.publicSections };
+      });
+    },
+    publishLibrary(entry) {
+      return enqueue(async () => {
+        const section = String(entry && entry.section || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+        const title = String(entry && entry.title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!section || !title || !entry.recipe) return null;
+        const data = await load();
+        const key = `${normalize(section)}\n${normalize(title)}`;
+        const row = {
+          section,
+          title,
+          recipe: structuredClone(entry.recipe),
+          userId: String(entry.userId || ''),
+          at: new Date().toISOString()
+        };
+        const found = data.library.findIndex(item => `${normalize(item.section)}\n${normalize(item.title)}` === key);
+        if (found >= 0) data.library[found] = row;
+        else data.library.push(row);
+        if (data.library.length > 400) data.library.splice(0, data.library.length - 400);
+        await persist();
+        return { section, title };
+      });
+    },
+    library() {
+      return enqueue(async () => {
+        const data = await load();
+        return groupLibrary(data.library.slice().reverse());
+      });
     }
   };
 }
 
-module.exports = { createStore };
+module.exports = { createStore, groupLibrary };

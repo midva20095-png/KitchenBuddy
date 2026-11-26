@@ -3,6 +3,7 @@
 const { Pool } = require('pg');
 const { matchCatalog } = require('./catalog');
 const { familyIds } = require('./menu');
+const { groupLibrary } = require('./store');
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS clients (
@@ -65,7 +66,19 @@ const SCHEMA = [
   `ALTER TABLE clients ADD COLUMN IF NOT EXISTS member BOOLEAN`,
   `ALTER TABLE clients ADD COLUMN IF NOT EXISTS dm_closed BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo BYTEA`,
-  `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT ''`
+  `ALTER TABLE catalog_recipes ADD COLUMN IF NOT EXISTS photo_type TEXT NOT NULL DEFAULT ''`,
+  `CREATE TABLE IF NOT EXISTS bot_settings (
+    key TEXT PRIMARY KEY,
+    value JSONB NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS library_recipes (
+    id BIGSERIAL PRIMARY KEY,
+    section TEXT NOT NULL,
+    title TEXT NOT NULL,
+    recipe JSONB NOT NULL,
+    user_id TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`
 ];
 
 function poolConfig(connectionString) {
@@ -514,6 +527,59 @@ function createClients(connectionString, options) {
     }));
   }
 
+  async function getSettings() {
+    const result = await query(`SELECT value FROM bot_settings WHERE key = 'public'`);
+    const value = result.rows[0] && result.rows[0].value;
+    if (value && typeof value.publicSections === 'boolean') return { publicSections: value.publicSections };
+    return { publicSections: true };
+  }
+
+  async function setSettings(patch) {
+    const publicSections = Boolean(patch && patch.publicSections);
+    await query(
+      `INSERT INTO bot_settings (key, value) VALUES ('public', $1::jsonb)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [JSON.stringify({ publicSections })]
+    );
+    return { publicSections };
+  }
+
+  async function publishLibrary(entry) {
+    const section = cleanText(entry && entry.section, 24);
+    const title = cleanText(entry && entry.title, 80);
+    if (!section || !title || !entry || !entry.recipe) return null;
+    const userId = cleanText(entry.userId, 20);
+    const found = await query(
+      `SELECT id FROM library_recipes WHERE lower(section) = lower($1) AND lower(title) = lower($2) LIMIT 1`,
+      [section, title]
+    );
+    if (found.rows[0]) {
+      await query(
+        `UPDATE library_recipes
+         SET section = $2, title = $3, recipe = $4::jsonb, user_id = $5, updated_at = NOW()
+         WHERE id = $1`,
+        [found.rows[0].id, section, title, JSON.stringify(entry.recipe), userId]
+      );
+    } else {
+      await query(
+        `INSERT INTO library_recipes (section, title, recipe, user_id) VALUES ($1, $2, $3::jsonb, $4)`,
+        [section, title, JSON.stringify(entry.recipe), userId]
+      );
+    }
+    return { section, title };
+  }
+
+  async function library() {
+    const result = await query(
+      `SELECT section, title, recipe FROM library_recipes ORDER BY updated_at DESC LIMIT 200`
+    );
+    return groupLibrary(result.rows.map(row => ({
+      section: row.section,
+      title: row.title,
+      recipe: row.recipe
+    })));
+  }
+
   function close() {
     return pool.end();
   }
@@ -541,7 +607,11 @@ function createClients(connectionString, options) {
     clientCard,
     setBlocked,
     setDmClosed,
-    listShared
+    listShared,
+    getSettings,
+    setSettings,
+    publishLibrary,
+    library
   };
 }
 

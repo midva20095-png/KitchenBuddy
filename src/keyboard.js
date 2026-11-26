@@ -21,11 +21,22 @@ function board(rows) {
   return JSON.stringify({ one_time: false, inline: false, buttons });
 }
 
-function menuKeyboard() {
-  return board([
+let showPublicList = false;
+
+function usePublicList(on) {
+  showPublicList = Boolean(on);
+}
+
+function menuKeyboard(options) {
+  const show = options && Object.prototype.hasOwnProperty.call(options, 'publicSections')
+    ? Boolean(options.publicSections)
+    : showPublicList;
+  const rows = [
     [textButton('Поиск рецептов', { a: 'search' }, 'positive')],
     [textButton('Моя кулинарная книга', { a: 'favorites' }, 'primary')]
-  ]);
+  ];
+  if (show) rows.push([textButton('Список по разделам', { a: 'public' }, 'secondary')]);
+  return board(rows);
 }
 
 function findButton() {
@@ -267,6 +278,23 @@ function bookBackKeyboard() {
   ]]);
 }
 
+function publicKeyboard(groups) {
+  const rows = (groups || []).slice(0, 8).map(group => [
+    textButton(group.section || 'Раздел', { a: 'pubsec', s: group.section }, 'primary')
+  ]);
+  rows.push([textButton('В меню', { a: 'menu' }, 'secondary')]);
+  return board(rows);
+}
+
+function publicListKeyboard(group) {
+  const name = group && group.section || '';
+  const rows = ((group && group.recipes) || []).slice(0, 8).map((item, index) => [
+    textButton(`${index + 1}. ${item.title || 'Рецепт'}`, { a: 'pubopen', s: name, i: index }, 'primary')
+  ]);
+  rows.push([textButton('К разделам', { a: 'public' }, 'secondary')]);
+  return board(rows);
+}
+
 function ideaKeyboard(ideas) {
   const rows = (ideas || []).slice(0, 5).map((item, index) => [
     textButton(`${index + 1}. ${item.title}`, { a: 'choose', i: index }, 'primary')
@@ -303,6 +331,9 @@ module.exports = {
   bookListKeyboard,
   putKeyboard,
   bookBackKeyboard,
+  publicKeyboard,
+  publicListKeyboard,
+  usePublicList,
   ideaKeyboard,
   backKeyboard,
   searchKeyboard

@@ -130,6 +130,11 @@ const PAGE = `<!doctype html>
     <div class="card" id="card" style="display:none"></div>
     <section class="panel on" id="home">
       <div class="card"><h2>Сводка</h2><div class="grid" id="stats"></div><p class="note" id="engine"></p></div>
+      <div class="card">
+        <h2>Кнопка в боте</h2>
+        <p class="note" id="listNote">Список по разделам — общая книга. Рецепты туда попадают из разделов, которые заводят люди.</p>
+        <button type="button" id="toggleList">Скрыть список по разделам</button>
+      </div>
     </section>
     <section class="panel" id="people">
       <div class="card">
@@ -212,6 +217,13 @@ const PAGE = `<!doctype html>
     }
     let everyone = [];
     let membersOnly = false;
+    let publicSections = true;
+    function paintList() {
+      $('toggleList').textContent = publicSections ? 'Скрыть список по разделам' : 'Включить список по разделам';
+      $('listNote').textContent = publicSections
+        ? 'Кнопка «Список по разделам» видна в боте. Рецепты из разделов личных книг доступны всем кнопками.'
+        : 'Кнопка «Список по разделам» скрыта. В боте её нет, пока вы снова не включите.';
+    }
     async function load() {
       const pack = await api('/api/admin/stats');
       const stats = pack.stats || {};
@@ -231,6 +243,9 @@ const PAGE = `<!doctype html>
       $('engine').textContent = stats.engine === 'postgres'
         ? 'Память: PostgreSQL. Рассылка только подписчикам сообщества, которые писали боту.'
         : 'Память: файл на сервере. Рассылка только подписчикам сообщества, которые писали боту.';
+      const settings = await api('/api/admin/settings');
+      publicSections = settings.publicSections !== false;
+      paintList();
       await search();
       const catalog = await api('/api/admin/catalog');
       const lines = [];
@@ -310,6 +325,15 @@ const PAGE = `<!doctype html>
     $('install2').onclick = install;
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
     $('enter').onclick = login;
+    $('toggleList').onclick = async () => {
+      try {
+        const data = await api('/api/admin/settings', { method: 'POST', body: JSON.stringify({ publicSections: !publicSections }) });
+        publicSections = data.publicSections !== false;
+        paintList();
+      } catch (error) {
+        alert(error.message);
+      }
+    };
     async function addBan() {
       $('userMsg').textContent = '';
       const userId = ($('userId').value || '').replace(/\D/g, '');
@@ -576,6 +600,15 @@ function createAdmin(options) {
     try {
       if (url.pathname === '/api/admin/stats') {
         send(res, 200, { stats: await db.stats() });
+      } else if (url.pathname === '/api/admin/settings' && req.method === 'GET') {
+        const settings = db.getSettings ? await db.getSettings() : { publicSections: true };
+        send(res, 200, settings);
+      } else if (url.pathname === '/api/admin/settings' && req.method === 'POST') {
+        const body = await readBody(req);
+        const settings = db.setSettings
+          ? await db.setSettings({ publicSections: Boolean(body.publicSections) })
+          : { publicSections: Boolean(body.publicSections) };
+        send(res, 200, settings);
       } else if (url.pathname === '/api/admin/clients') {
         send(res, 200, { rows: await db.listClients(url.searchParams.get('q') || '') });
       } else if (url.pathname === '/api/admin/client') {

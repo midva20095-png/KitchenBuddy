@@ -28,4 +28,24 @@ test('диалог пишется на диск и не портится чуж�
   assert.equal(await fresh.getUser('1'), null);
   await fresh.saveUser(blankUser('2'));
   assert.equal((await fresh.getUser('2')).id, '2');
+  assert.equal((await fresh.getSettings()).publicSections, true);
+  await fresh.publishLibrary({
+    section: 'Завтраки',
+    title: 'Сырники',
+    recipe: { title: 'Сырники', ingredients: ['творог'], steps: ['Обжарьте'] },
+    userId: '2'
+  });
+  await fresh.publishLibrary({
+    section: 'завтраки',
+    title: 'Сырники',
+    recipe: { title: 'Сырники', ingredients: ['творог', 'мука'], steps: ['Обжарьте ещё раз'] },
+    userId: '3'
+  });
+  const groups = await fresh.library();
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].recipes.length, 1);
+  assert.deepEqual(groups[0].recipes[0].recipe.ingredients, ['творог', 'мука']);
+  const hidden = await fresh.setSettings({ publicSections: false });
+  assert.equal(hidden.publicSections, false);
+  assert.equal((await fresh.getSettings()).publicSections, false);
 });

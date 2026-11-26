@@ -14,6 +14,9 @@ const {
   bookListKeyboard,
   putKeyboard,
   bookBackKeyboard,
+  publicKeyboard,
+  publicListKeyboard,
+  usePublicList,
   ideaKeyboard,
   backKeyboard,
   searchKeyboard
@@ -141,6 +144,7 @@ function helpText() {
     '«Поиск рецептов»: напишите как есть, например «сырники на два человека», «рецепт для диабетика», «курица и рис».',
     '«Сохранить» кладёт рецепт в «Моя кулинарная книга».',
     'В книге рецепты лежат по разделам. «Новый раздел» заводит свой, например «Завтраки».',
+    '«Список по разделам» показывает общую книгу: разделы и рецепты кнопками, если кнопка включена.',
     '«открой 1» открывает рецепт, «удали 2» убирает его.',
     'Фото не разбираю.'
   ].join('\n');
@@ -187,6 +191,7 @@ function actionOf(text, payload) {
   if (['из того, что есть', 'из того что есть'].includes(value)) return 'ingredients';
   if (['диетическое'].includes(value)) return 'diet';
   if (['найти', 'найди', 'поиск', 'поиск рецептов', 'общий поиск', 'найти рецепт'].includes(value)) return 'search';
+  if (['список по разделам', 'общие разделы', 'общая книга'].includes(value)) return 'public';
   return '';
 }
 
@@ -337,6 +342,24 @@ function sectionsOf(user) {
   return user.book;
 }
 
+function libraryCard(user, item) {
+  if (!item || !item.section) return null;
+  const section = sectionsOf(user).find(row => row.id === item.section);
+  if (!section || !section.title || !item.recipe) return null;
+  return {
+    section: section.title,
+    title: item.title || item.recipe.title || 'Рецепт',
+    recipe: item.recipe,
+    userId: String(user.id || '')
+  };
+}
+
+function withLibrary(view, user, item) {
+  const card = libraryCard(user, item);
+  if (card) view.publish = card;
+  return view;
+}
+
 function looseCount(user) {
   return user.favorites.filter(item => !item.section).length;
 }
@@ -444,7 +467,7 @@ function fromNewSection(user, text) {
     ? `«${user.favorites[index].title}» теперь в разделе «${added.section.title}».`
     : (added.created ? `Раздел «${added.section.title}» создан.` : `Раздел «${added.section.title}» уже есть.`);
   view.messages[0].text = `${note}\n\n${view.messages[0].text}`;
-  return view;
+  return index >= 0 ? withLibrary(view, user, user.favorites[index]) : view;
 }
 
 function putFavorite(user, index, sectionId) {
@@ -455,7 +478,7 @@ function putFavorite(user, index, sectionId) {
   item.section = section.id;
   const view = openBookSection(user, section.id);
   view.messages[0].text = `«${item.title}» в разделе «${section.title}».\n\n${view.messages[0].text}`;
-  return view;
+  return withLibrary(view, user, item);
 }
 
 function openFavorite(user, index) {
@@ -500,7 +523,7 @@ function saveFavorite(user, now) {
   const note = place
     ? `«${title}» в кулинарной книге, раздел «${place.title}». Можно переложить.`
     : `«${title}» в кулинарной книге. Выберите раздел или заведите новый.`;
-  return { user, messages: [say(note, putKeyboard(user.book, index))], job: null };
+  return withLibrary({ user, messages: [say(note, putKeyboard(user.book, index))], job: null }, user, entry);
 }
 
 function showShop(user) {
@@ -891,6 +914,55 @@ function askWall(user) {
   return { user, messages: [], job: null, post: user.pendingShare };
 }
 
+function showPublic(user, ctx) {
+  if (!ctx || !ctx.publicSections) {
+    user.mode = 'menu';
+    user.draft = {};
+    return { user, messages: [say('Список по разделам сейчас скрыт.', menuKeyboard())], job: null };
+  }
+  const groups = Array.isArray(ctx.library) ? ctx.library : [];
+  user.mode = 'public';
+  user.draft = {};
+  if (!groups.length) {
+    return {
+      user,
+      messages: [say('В общем списке пока пусто. Рецепт попадает сюда, когда его кладут в раздел своей книги.', menuKeyboard())],
+      job: null
+    };
+  }
+  const lines = groups.map(group => `${group.section} — ${group.recipes.length}`);
+  return {
+    user,
+    messages: [say(`Список по разделам:\n${lines.join('\n')}\n\nОткройте раздел кнопкой.`, publicKeyboard(groups))],
+    job: null
+  };
+}
+
+function openPublicSection(user, ctx, name) {
+  const groups = Array.isArray(ctx && ctx.library) ? ctx.library : [];
+  const group = groups.find(item => normalize(item.section) === normalize(name));
+  if (!group) return showPublic(user, ctx);
+  user.mode = 'public';
+  user.draft = { publicSection: group.section };
+  const lines = group.recipes.map((item, index) => `${index + 1}. ${item.title}`);
+  return {
+    user,
+    messages: [say(`${group.section}:\n${lines.join('\n')}\n\nОткройте рецепт кнопкой.`, publicListKeyboard(group))],
+    job: null
+  };
+}
+
+function openPublicRecipe(user, ctx, name, index) {
+  const groups = Array.isArray(ctx && ctx.library) ? ctx.library : [];
+  const group = groups.find(item => normalize(item.section) === normalize(name));
+  const item = group && group.recipes[index];
+  if (!item || !item.recipe) return showPublic(user, ctx);
+  user.lastRecipe = structuredClone(item.recipe);
+  user.stepIndex = 0;
+  user.mode = 'menu';
+  return { user, messages: [say(formatRecipe(item.recipe), recipeKeyboard())], job: null };
+}
+
 function openHub(user, id) {
   const text = hubText(id);
   const keyboard = hubKeyboard(id);
@@ -949,6 +1021,7 @@ function routeFreeText(user, text) {
 }
 
 function turn(user, input, ctx) {
+  usePublicList(Boolean(ctx && ctx.publicSections));
   const source = user ? structuredClone(user) : blankUser((input && input.userId) || '0');
   if (!Array.isArray(source.favorites)) source.favorites = [];
   if (!Array.isArray(source.book)) source.book = [];
@@ -1002,6 +1075,9 @@ function turn(user, input, ctx) {
   if (action === 'newsection') return beginNewSection(source);
   if (action === 'book') return openBookSection(source, String((payload && payload.s) || ''));
   if (action === 'put') return putFavorite(source, Number(payload && payload.i), String((payload && payload.s) || ''));
+  if (action === 'public') return showPublic(source, ctx);
+  if (action === 'pubsec') return openPublicSection(source, ctx, String((payload && payload.s) || ''));
+  if (action === 'pubopen') return openPublicRecipe(source, ctx, String((payload && payload.s) || ''), Number(payload && payload.i));
   if (action === 'shop') return showShop(source);
   if (action === 'steps') return showStep(source, 0);
   if (action === 'next') return showStep(source, (source.stepIndex || 0) + (source.mode === 'steps' ? 1 : 0));
