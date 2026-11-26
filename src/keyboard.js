@@ -23,13 +23,8 @@ function board(rows) {
 
 function menuKeyboard() {
   return board([
-    [textButton('Найти', { a: 'search' }, 'positive')],
-    [textButton('Обед', { a: 'hub', h: 'meal' }, 'primary'), textButton('Завтрак', { a: 'hub', h: 'morning' }, 'primary')],
-    [textButton('Сладкое', { a: 'hub', h: 'sweetbox' }, 'primary'), textButton('Кухни', { a: 'hub', h: 'world' }, 'primary')],
-    [textButton('Диета', { a: 'hub', h: 'dietbox' }, 'primary'), textButton('Профи', { a: 'hub', h: 'pro' }, 'primary')],
-    [textButton('Подбор', { a: 'hub', h: 'pick' }, 'secondary'), textButton('Заготовки', { a: 'hub', h: 'pantry' }, 'secondary')],
-    [textButton('Праздник', { a: 'hub', h: 'feast' }, 'secondary'), textButton('Мои рецепты', { a: 'hub', h: 'mine' }, 'positive')],
-    [textButton('Справка', { a: 'help' }, 'secondary')]
+    [textButton('Поиск рецептов', { a: 'search' }, 'positive')],
+    [textButton('Сохранённые', { a: 'favorites' }, 'primary')]
   ]);
 }
 
@@ -160,27 +155,11 @@ function hubByText(text) {
   return map[value] || '';
 }
 
-function recipeKeyboard(recipe) {
-  const steps = recipe && Array.isArray(recipe.steps) && recipe.steps.length > 1;
-  const rows = [[
-    textButton('В избранное', { a: 'save' }, 'positive'),
-    textButton('Список покупок', { a: 'shop' }, 'primary')
-  ]];
-  if (steps) {
-    rows.push([
-      textButton('Готовить по шагам', { a: 'steps' }, 'primary'),
-      textButton('Другой рецепт', { a: 'another' }, 'secondary')
-    ]);
-  } else {
-    rows.push([textButton('Другой рецепт', { a: 'another' }, 'secondary')]);
-  }
-  rows.push([
-    textButton('В базу', { a: 'keep' }, 'positive'),
-    textButton('Поделиться', { a: 'share' }, 'primary')
+function recipeKeyboard() {
+  return board([
+    [textButton('Сохранить', { a: 'save' }, 'positive'), textButton('Сохранённые', { a: 'favorites' }, 'primary')],
+    [textButton('Поиск рецептов', { a: 'search' }, 'secondary')]
   ]);
-  rows.push([textButton('Мой рецепт', { a: 'myrecipe' }, 'secondary')]);
-  rows.push([textButton('Найти', { a: 'search' }, 'positive'), textButton('В меню', { a: 'menu' }, 'secondary')]);
-  return board(rows);
 }
 
 function shareKeyboard() {
@@ -254,11 +233,11 @@ function ideaKeyboard(ideas) {
 }
 
 function searchKeyboard() {
-  return board([[textButton('В меню', { a: 'menu' }, 'secondary')]]);
+  return menuKeyboard();
 }
 
 function backKeyboard() {
-  return board([[textButton('Найти', { a: 'search' }, 'positive'), textButton('В меню', { a: 'menu' }, 'secondary')]]);
+  return menuKeyboard();
 }
 
 module.exports = {

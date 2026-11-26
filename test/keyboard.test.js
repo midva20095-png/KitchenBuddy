@@ -34,9 +34,9 @@ test('клавиатура ВК помещается в лимиты кнопо�
     }
   }
   const labels = rows(menuKeyboard()).flat().map(button => button.action.label);
-  assert.deepEqual(labels, ['Найти', 'Обед', 'Завтрак', 'Сладкое', 'Кухни', 'Диета', 'Профи', 'Подбор', 'Заготовки', 'Праздник', 'Мои рецепты', 'Справка']);
-  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Список покупок/);
-  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Найти/);
+  assert.deepEqual(labels, ['Поиск рецептов', 'Сохранённые']);
+  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Сохранить/);
+  assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Поиск рецептов/);
   assert.match(rows(hubKeyboard('pick')).flat().map(button => button.action.label).join(' '), /Из того, что есть/);
   for (const id of HUBS) {
     assert.ok(hubKeyboard(id));

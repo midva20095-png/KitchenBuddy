@@ -4,7 +4,6 @@ const {
   menuKeyboard,
   hubKeyboard,
   hubText,
-  hubByText,
   shareKeyboard,
   recipeKeyboard,
   servingsKeyboard,
@@ -17,7 +16,7 @@ const {
   searchKeyboard
 } = require('./keyboard');
 const { buildUserPrompt } = require('./prompt');
-const { parseRecipe, parseIdeas, formatIdeas, titleFits, asPlain, formatRecipe, formatShopping, formatStep, commentBody } = require('./recipe');
+const { parseRecipe, parseIdeas, formatIdeas, asPlain, formatRecipe, formatShopping, formatStep, commentBody } = require('./recipe');
 const { normalize, clip, moscowDay } = require('./text');
 const { blockedReason } = require('./guard');
 const { sectionById, sectionAlias, sectionKeyboard, sectionText } = require('./menu');
@@ -128,18 +127,15 @@ function bumpUsage(user, now, kind) {
 }
 
 function welcomeText() {
-  return 'Здравствуйте. Я Кухонный Помощник. Напишите блюдо, например «борщ на 4».';
+  return 'Здравствуйте. Я Кухонный Помощник. Нажмите «Поиск рецептов» и напишите, что приготовить. Готовый рецепт можно положить в «Сохранённые».';
 }
 
 function helpText() {
   return [
     'Справка.',
-    'Напишите блюдо: «борщ на 6», «сырники», «курица и рис».',
-    'Кнопка «Найти» ищет без разделов: напишите блюдо, продукты или пожелание.',
-    'Кнопка раздела ждёт название. Слово «суп» само по себе рецепт не открывает, в поиске оно даёт несколько вариантов.',
-    'Подбор сначала показывает несколько названий.',
-    'Список покупок — продукты и примерная цена.',
-    'Готовый рецепт попадает в общую базу.',
+    '«Поиск рецептов» отправляет текст сразу в модель: «сырники на два человека», «рецепт для диабетика», «курица и рис».',
+    '«Сохранить» кладёт открытый рецепт в «Сохранённые».',
+    'В сохранённых: «открой 1», «удали 2».',
     'Фото не разбираю.'
   ].join('\n');
 }
@@ -165,13 +161,13 @@ function actionOf(text, payload) {
   if (!value) return '';
   if (['начать', 'start', '/start', 'меню', 'в меню', 'назад', 'отмена', 'стоп', 'хватит', 'готово'].includes(value)) return 'menu';
   if (['помощь', 'справка', 'help', '/help'].includes(value)) return 'help';
-  if (['избранное', 'избранные'].includes(value)) return 'favorites';
+  if (['избранное', 'избранные', 'сохраненные', 'сохраненное'].includes(value)) return 'favorites';
   if (['покупки', 'список покупок', 'что купить', 'список'].includes(value)) return 'shop';
   if (['по шагам', 'шаги', 'шаг', 'сначала', 'с начала', 'готовить по шагам'].includes(value)) return 'steps';
   if (['дальше', 'далее', 'следующий', 'следующий шаг'].includes(value)) return 'next';
   if (['сохрани в базу', 'в базу'].includes(value)) return 'keep';
   if (['моя база', 'база'].includes(value)) return 'base';
-  if (['сохрани', 'в избранное', 'избранное сохранить'].includes(value)) return 'save';
+  if (['сохрани', 'сохранить', 'в избранное', 'избранное сохранить'].includes(value)) return 'save';
   if (['еще вариант', 'другой вариант', 'другой рецепт'].includes(value)) return 'another';
   if (['поделиться', 'на стену'].includes(value)) return value === 'на стену' ? 'wall' : 'share';
   if (['мой рецепт', 'свой рецепт'].includes(value)) return 'myrecipe';
@@ -199,23 +195,39 @@ function chatAddressed(input, botName) {
   return /рецепт|кухн|повар|приготов|найди|найти/.test(value);
 }
 
+const SERVING_WORDS = {
+  один: 1, одна: 1, одно: 1, одного: 1,
+  два: 2, две: 2, двух: 2, двоих: 2,
+  три: 3, трех: 3, троих: 3,
+  четыре: 4, четырех: 4,
+  пять: 5, пяти: 5,
+  шесть: 6, шести: 6,
+  семь: 7, семи: 7,
+  восемь: 8, восьми: 8,
+  девять: 9, девяти: 9,
+  десять: 10, десяти: 10
+};
+
 function readServings(text) {
   const value = normalize(text);
   let match = value.match(/(?:^|\s)(?:на|для)\s*(\d{1,2})(?:\s*(?:порц|персон|чел)[а-я]*)?/);
   if (!match) match = value.match(/^(\d{1,2})$/);
   if (!match) match = value.match(/^(\d{1,2})\s*(?:порц|персон|чел)/);
-  if (!match) {
-    if (value === 'как есть' || value === 'как в рецепте') return 0;
-    return null;
+  if (match) {
+    const n = Number(match[1]);
+    if (!Number.isInteger(n) || n < 1 || n > 20) return null;
+    return n;
   }
-  const n = Number(match[1]);
-  if (!Number.isInteger(n) || n < 1 || n > 20) return null;
-  return n;
+  const word = value.match(/(?:^|\s)(?:на|для)\s+(один|одна|одно|одного|два|две|двух|двоих|три|трех|троих|четыре|четырех|пять|пяти|шесть|шести|семь|семи|восемь|восьми|девять|девяти|десять|десяти)(?:\s*(?:порц|персон|чел)[а-я]*)?/);
+  if (word && SERVING_WORDS[word[1]]) return SERVING_WORDS[word[1]];
+  if (value === 'как есть' || value === 'как в рецепте') return 0;
+  return null;
 }
 
 function stripServings(text) {
   return String(text || '')
     .replace(/(^|\s)(?:на|для)\s*\d{1,2}(?:\s*(?:порц|персон|чел)[а-яё]*)?/gi, ' ')
+    .replace(/(^|\s)(?:на|для)\s+(?:один|одна|одно|одного|два|две|двух|двоих|три|трех|трёх|троих|четыре|четырех|четырёх|пять|пяти|шесть|шести|семь|семи|восемь|восьми|девять|девяти|десять|десяти)(?:\s*(?:порц|персон|чел)[а-яё]*)?/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -317,10 +329,10 @@ function showFavorites(user) {
   user.mode = 'menu';
   user.draft = {};
   if (!user.favorites.length) {
-    return { user, messages: [say('Избранное пока пусто. После рецепта нажмите «В избранное».', menuKeyboard())], job: null };
+    return { user, messages: [say('Сохранённых рецептов пока нет. После рецепта нажмите «Сохранить».', menuKeyboard())], job: null };
   }
   const lines = user.favorites.map((item, index) => `${index + 1}. ${item.title}`);
-  const text = `Избранное:\n${lines.join('\n')}\n\nОткройте кнопкой или напишите «открой 1». «удали 2» убирает рецепт.`;
+  const text = `Сохранённые:\n${lines.join('\n')}\n\nОткройте кнопкой или напишите «открой 1». «удали 2» убирает рецепт.`;
   return { user, messages: [say(text, favoritesKeyboard(user.favorites))], job: null };
 }
 
@@ -359,7 +371,7 @@ function saveFavorite(user, now) {
   if (existing >= 0) user.favorites.splice(existing, 1, entry);
   else user.favorites.push(entry);
   if (user.favorites.length > 15) user.favorites.splice(0, user.favorites.length - 15);
-  return { user, messages: [say(`Сохранила «${title}». Открыть можно в «Избранное».`, recipeKeyboard(user.lastRecipe))], job: null };
+  return { user, messages: [say(`Сохранила «${title}». Открыть можно в «Сохранённые».`, recipeKeyboard(user.lastRecipe))], job: null };
 }
 
 function showShop(user) {
@@ -510,11 +522,18 @@ function wishQuery(text) {
   return /диабет|деобет|диет|болезн|похуд|калор|аллерг|халял|кошер|веган|вегетар|постн|глютен|без сахара|сыроед|пескетар|инсулин/.test(value);
 }
 
+function requestText(text) {
+  return stripServings(text)
+    .replace(/^(?:рецепт|как приготовить|как сделать|найди|найти|поиск рецептов|поиск|покажи)\s+/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function fromDishText(user, text) {
   const servings = readServings(text);
-  const name = cleanDish(text);
+  const name = requestText(text);
   if (!dishNameOk(name)) {
-    return { user, messages: [say('Напишите название блюда, например «сырники» или «борщ на 6».', backKeyboard())], job: null };
+    return { user, messages: [say('Напишите, что приготовить, например «сырники» или «борщ на 6».', backKeyboard())], job: null };
   }
   const data = { dish: name, servings: servings == null ? 0 : servings };
   if (wishQuery(text)) data.free = true;
@@ -589,59 +608,13 @@ function beginSearch(user) {
   user.lastCategory = '';
   return {
     user,
-    messages: [say('Общий поиск, без разделов. Напишите блюдо, продукты или пожелание — пришлю рецепт или несколько вариантов.', searchKeyboard())],
+    messages: [say('Напишите, что приготовить, своими словами. Текст уйдёт в модель, в ответ придёт рецепт. Например: «сырники на два человека» или «рецепт для диабетика».', searchKeyboard())],
     job: null
   };
 }
 
 function fromSearch(user, text) {
   user.lastCategory = '';
-  const quick = wantsQuick(text);
-  if (quick) {
-    return ideasJob(user, { minutes: quick, theme: `блюдо за ${quick} минут`, servings: 2, section: '' });
-  }
-  if (looksLikeIngredients(text)) {
-    const products = stripServings(String(text)
-      .replace(/^что приготовить из\s+/i, '')
-      .replace(/^из\s+/i, '')
-      .replace(/^у меня есть\s+/i, '')
-      .trim());
-    if (normalize(products).length >= 3) {
-      return ideasJob(user, {
-        products,
-        theme: `из продуктов: ${products}`,
-        servings: readServings(text) == null ? 2 : readServings(text),
-        section: ''
-      });
-    }
-  }
-  const alias = sectionAlias(text);
-  const node = alias ? sectionById(alias) : null;
-  const servings = readServings(text) == null ? 2 : readServings(text);
-  if (node) {
-    return ideasJob(user, {
-      theme: node.title,
-      title: node.title,
-      brief: node.brief,
-      servings,
-      section: ''
-    });
-  }
-  const diet = dietOnly(text);
-  const name = cleanDish(text);
-  if (diet && (!dishNameOk(name) || searchIsTheme(name))) {
-    return ideasJob(user, { diet: DIETS[diet], theme: name || DIETS[diet], servings, section: '' });
-  }
-  if (!dishNameOk(name)) {
-    return {
-      user,
-      messages: [say('Напишите, что найти: «борщ», «курица и рис» или «лёгкий ужин».', searchKeyboard())],
-      job: null
-    };
-  }
-  if (searchIsTheme(name)) {
-    return ideasJob(user, { theme: name, diet: diet ? DIETS[diet] : '', servings, section: '' });
-  }
   return fromDishText(user, text);
 }
 
@@ -841,22 +814,8 @@ function routeFreeText(user, text) {
     if (quickHere) return fromQuick(user, quickHere);
     return fromSectionDish(user, user.draft.section, text);
   }
-  const picked = namedSection(user, text);
-  if (picked) return picked;
-  const hasRecipe = !!user.lastRecipe;
-  if (followUp(text, hasRecipe)) return fromFollow(user, text);
-  if (user.mode !== 'steps' && looksLikeIngredients(text)) return fromIngredientsText(user, text);
-  const quick = wantsQuick(text);
-  if (quick) return fromQuick(user, quick);
-  const servings = readServings(text);
-  const dish = cleanDish(text);
-  if (tooVague(dish, '')) {
-    return { user, messages: [say('Напишите блюдо целиком, например «гороховый суп на 4» или «медовик». Слово «суп» само по себе рецепт не открывает.', menuKeyboard())], job: null };
-  }
-  if (servings != null && dishNameOk(dish)) return jobReply(user, aiJob('dish', { dish, servings }, SEEK));
-  if (dishNameOk(dish) && !String(text).includes('?')) return fromDishText(user, text);
-  if (dishNameOk(dish)) return fromChat(user, text);
-  return { user, messages: [say('Напишите блюдо или продукты. «Помощь» покажет примеры.', menuKeyboard())], job: null };
+  if (followUp(text, !!user.lastRecipe)) return fromFollow(user, text);
+  return fromDishText(user, text);
 }
 
 function turn(user, input, ctx) {
@@ -901,8 +860,6 @@ function turn(user, input, ctx) {
     }
     return { user: source, messages: [], job: null, openCatalog: id };
   }
-  const hub = !payload && source.mode !== 'search' && hubByText(text);
-  if (hub) return openHub(source, hub);
   const action = actionOf(text, payload);
   if (action === 'menu') return menuTurn(source, ctx);
   if (action === 'help') {
@@ -988,17 +945,6 @@ function complete(user, job, raw, ctx) {
   const recipe = parseRecipe(raw);
   const asked = job.data && String(job.data.dish || '').trim();
   const free = Boolean(job.data && job.data.free);
-  if (recipe && asked && !free && !titleFits(recipe.title, asked)) {
-    if (!ctx || !ctx.saved) bumpUsage(next, now, 'dm');
-    next.mode = 'menu';
-    next.draft = {};
-    return {
-      user: next,
-      messages: [say(`На «${asked}» открылся другой рецепт, его не показываю. Напишите блюдо короче, без лишнего слова вроде «торт».`, backKeyboard())],
-      commentText: '',
-      recipe: false
-    };
-  }
   let answer = recipe ? formatRecipe(recipe) : (asPlain(raw) || 'Не разобрала ответ. Напишите запрос ещё раз, можно короче.');
   if (free && /диабет|деобет|болезн|похуд|лечебн|инсулин|давлен|холестер/.test(normalize(asked)) && !/не рекомендация врача|не лечебн/.test(answer)) {
     answer += '\n\nЭто обычная домашняя еда, не рекомендация врача.';

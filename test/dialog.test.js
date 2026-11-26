@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { blankUser, turn, complete, overLimit, LIMIT_TEXT } = require('../src/dialog');
+const { menuKeyboard } = require('../src/keyboard');
 
 const now = new Date('2026-11-18T12:00:00Z');
 const ctx = { now, botName: 'Кухонный', communityName: 'Кухня', invite: 'Полный рецепт — в сообщениях сообщества.' };
@@ -22,7 +23,8 @@ function labels(keyboard) {
 test('свободный текст становится рецептом, уточнением или отказом', () => {
   const hello = turn(blankUser('1'), { text: 'Привет' }, ctx);
   assert.equal(hello.job, null);
-  assert.equal(hello.messages[0].text, 'Здравствуйте. Я Кухонный Помощник. Напишите блюдо, например «борщ на 4».');
+  assert.match(hello.messages[0].text, /Поиск рецептов/);
+  assert.match(hello.messages[0].text, /Сохранённые/);
 
   const dish = turn(blankUser('1'), { text: 'борщ на 6' }, ctx);
   assert.equal(dish.job.kind, 'dish');
@@ -35,11 +37,8 @@ test('свободный текст становится рецептом, ут�
   assert.match(named.job.prompt, /сырников/);
   assert.match(named.job.prompt, /разумное количество/);
 
-  let picking = turn(blankUser('1'), { text: 'курица, рис' }, ctx);
-  assert.equal(picking.job, null);
-  assert.equal(picking.user.mode, 'servings');
-  picking = turn(picking.user, { text: '2' }, ctx);
-  assert.equal(picking.job.kind, 'ideas');
+  const picking = turn(blankUser('1'), { text: 'курица, рис' }, ctx);
+  assert.equal(picking.job.kind, 'dish');
   assert.match(picking.job.prompt, /курица, рис/);
 
   const polite = turn(blankUser('1'), { text: 'борщ, пожалуйста' }, ctx);
@@ -47,9 +46,8 @@ test('свободный текст становится рецептом, ут�
   assert.match(polite.job.prompt, /борщ/);
 
   const quick = turn(blankUser('1'), { text: 'ужин за 20 минут' }, ctx);
-  assert.equal(quick.job.kind, 'ideas');
-  assert.match(quick.job.prompt, /20/);
-  assert.match(quick.job.prompt, /ideas/);
+  assert.equal(quick.job.kind, 'dish');
+  assert.match(quick.job.prompt, /ужин за 20 минут/);
 
   const diet = turn(blankUser('1'), { payload: { a: 'pickdiet', d: 'vegetarian' } }, ctx);
   assert.equal(diet.job.kind, 'ideas');
@@ -193,8 +191,8 @@ test('меню по разделам, справка и свой рецепт', 
   assert.match(labels(meal.messages[0].keyboard).join(' '), /Гарниры/);
 
   const help = turn(blankUser('1'), { text: 'Справка' }, ctx);
-  assert.match(help.messages[0].text, /Список покупок/);
-  assert.match(help.messages[0].text, /борщ на 6/);
+  assert.match(help.messages[0].text, /Поиск рецептов/);
+  assert.match(help.messages[0].text, /Сохранённые/);
 
   const missing = turn(blankUser('1'), { payload: { a: 'share' } }, ctx);
   assert.equal(missing.share, undefined);
@@ -232,16 +230,16 @@ test('подбор даёт список, а чужое название не п
   assert.equal(picked.job.kind, 'dish');
   assert.match(picked.job.prompt, /Курица с рисом/);
 
-  const wrong = complete(picked.user, picked.job, RECIPE, ctx);
-  assert.equal(wrong.recipe, false);
-  assert.match(wrong.messages[0].text, /другой рецепт/);
+  const shown = complete(picked.user, picked.job, RECIPE, ctx);
+  assert.equal(shown.recipe, true);
+  assert.match(shown.messages[0].text, /Борщ/);
 });
 
 test('поиск без разделов принимает блюдо, тему и продукты', () => {
   const opened = turn(blankUser('1'), { payload: { a: 'search' } }, ctx);
   assert.equal(opened.job, null);
   assert.equal(opened.user.mode, 'search');
-  assert.match(opened.messages[0].text, /без разделов/);
+  assert.match(opened.messages[0].text, /своими словами/);
   assert.equal(turn(blankUser('1'), { text: 'найти' }, ctx).user.mode, 'search');
 
   const dish = turn(opened.user, { text: 'борщ на 4' }, ctx);
@@ -252,32 +250,38 @@ test('поиск без разделов принимает блюдо, тему
   assert.match(dish.job.prompt, /Порции: 4/);
 
   const vague = turn(opened.user, { text: 'суп' }, ctx);
-  assert.equal(vague.job.kind, 'ideas');
-  assert.equal(vague.job.data.section, '');
+  assert.equal(vague.job.kind, 'dish');
   assert.match(vague.job.prompt, /суп/);
 
-  const shelf = turn(opened.user, { text: 'супы' }, ctx);
-  assert.equal(shelf.job.kind, 'ideas');
-  assert.notEqual(shelf.user.mode, 'section');
-
   const products = turn(opened.user, { text: 'курица, рис' }, ctx);
-  assert.equal(products.job.kind, 'ideas');
+  assert.equal(products.job.kind, 'dish');
   assert.match(products.job.prompt, /курица, рис/);
 
   const diet = turn(opened.user, { text: 'веганское' }, ctx);
-  assert.equal(diet.job.kind, 'ideas');
-  assert.match(diet.job.prompt, /Веганское/);
+  assert.equal(diet.job.kind, 'dish');
+  assert.equal(diet.job.data.free, true);
 
   const pro = turn(blankUser('1'), { payload: { a: 'hub', h: 'pro' } }, ctx);
   assert.match(pro.messages[0].text, /Профессиональн/);
   assert.match(labels(pro.messages[0].keyboard).join(' '), /Ресторан/);
   assert.match(labels(pro.messages[0].keyboard).join(' '), /Найти/);
 
-  const kitchens = turn(blankUser('1'), { text: 'кухни' }, ctx);
-  assert.match(kitchens.messages[0].text, /Кухни/);
-  const dietHub = turn(blankUser('1'), { text: 'диета' }, ctx);
-  assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Веганское/);
-  assert.match(labels(dietHub.messages[0].keyboard).join(' '), /Халяль/);
+  const askedPlain = turn(blankUser('1'), { text: 'Сырник на два человека' }, ctx);
+  assert.equal(askedPlain.job.kind, 'dish');
+  assert.match(askedPlain.job.prompt, /Блюдо: Сырник/);
+  assert.match(askedPlain.job.prompt, /Порции: 2/);
+  const cooked = complete(askedPlain.user, askedPlain.job, JSON.stringify({
+    title: 'Сырники',
+    time: '20 минут',
+    servings: '2 порции',
+    ingredients: ['творог', 'яйцо'],
+    steps: ['Смешайте и обжарьте']
+  }), ctx);
+  assert.equal(cooked.recipe, true);
+  assert.match(cooked.messages[0].text, /Сырники/);
+  assert.match(labels(cooked.messages[0].keyboard).join(' '), /Сохранить/);
+  assert.match(labels(menuKeyboard()).join(' '), /Поиск рецептов/);
+  assert.match(labels(menuKeyboard()).join(' '), /Сохранённые/);
 });
 
 test('пожелание вроде рецепта для диабетика доходит до модели', () => {
