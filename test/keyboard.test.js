@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { menuKeyboard, hubKeyboard, hubText, recipeKeyboard, servingsKeyboard, favoritesKeyboard, catalogKeyboard } = require('../src/keyboard');
+const { menuKeyboard, hubKeyboard, hubText, recipeKeyboard, servingsKeyboard, favoritesKeyboard, bookKeyboard, putKeyboard, catalogKeyboard } = require('../src/keyboard');
 const { sectionIds, sectionById, sectionKeyboard } = require('../src/menu');
 
 const HUBS = ['meal', 'morning', 'sweetbox', 'pick', 'mine', 'world', 'pro', 'dietbox', 'pantry', 'feast'];
@@ -17,6 +17,8 @@ test('клавиатура ВК помещается в лимиты кнопо�
     recipeKeyboard({ steps: ['a', 'b'] }),
     servingsKeyboard(),
     favoritesKeyboard([{ title: 'Очень длинное название домашнего блюда с грибами и сметаной' }]),
+    bookKeyboard([{ id: 'b1', title: 'Завтраки' }, { id: 'b2', title: 'Сладкое' }], true),
+    putKeyboard([{ id: 'b1', title: 'Завтраки' }], 0),
     ...HUBS.map(id => hubKeyboard(id)),
     catalogKeyboard([{ id: '4', title: 'Очень длинное название домашнего блюда с грибами и сметаной' }])
   ].concat(sectionIds().map(sectionKeyboard).filter(Boolean));
@@ -34,7 +36,7 @@ test('клавиатура ВК помещается в лимиты кнопо�
     }
   }
   const labels = rows(menuKeyboard()).flat().map(button => button.action.label);
-  assert.deepEqual(labels, ['Поиск рецептов', 'Сохранённые']);
+  assert.deepEqual(labels, ['Поиск рецептов', 'Моя кулинарная книга']);
   assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Сохранить/);
   assert.match(rows(recipeKeyboard({ steps: ['a', 'b'] })).flat().map(button => button.action.label).join(' '), /Поиск рецептов/);
   assert.match(rows(hubKeyboard('pick')).flat().map(button => button.action.label).join(' '), /Из того, что есть/);

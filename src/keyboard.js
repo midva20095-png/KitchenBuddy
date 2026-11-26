@@ -24,7 +24,7 @@ function board(rows) {
 function menuKeyboard() {
   return board([
     [textButton('Поиск рецептов', { a: 'search' }, 'positive')],
-    [textButton('Сохранённые', { a: 'favorites' }, 'primary')]
+    [textButton('Моя кулинарная книга', { a: 'favorites' }, 'primary')]
   ]);
 }
 
@@ -157,7 +157,8 @@ function hubByText(text) {
 
 function recipeKeyboard() {
   return board([
-    [textButton('Сохранить', { a: 'save' }, 'positive'), textButton('Сохранённые', { a: 'favorites' }, 'primary')],
+    [textButton('Сохранить', { a: 'save' }, 'positive')],
+    [textButton('Моя кулинарная книга', { a: 'favorites' }, 'primary')],
     [textButton('Поиск рецептов', { a: 'search' }, 'secondary')]
   ]);
 }
@@ -224,6 +225,48 @@ function favoritesKeyboard(list) {
   return board(rows);
 }
 
+function bookKeyboard(sections, loose) {
+  const cap = loose ? 7 : 8;
+  const rows = (sections || []).slice(0, cap).map(section => [
+    textButton(section.title || 'Раздел', { a: 'book', s: section.id }, 'primary')
+  ]);
+  if (loose) rows.push([textButton('Без раздела', { a: 'book', s: '-' }, 'secondary')]);
+  rows.push([
+    textButton('Новый раздел', { a: 'newsection' }, 'positive'),
+    textButton('Поиск рецептов', { a: 'search' }, 'secondary')
+  ]);
+  return board(rows);
+}
+
+function bookListKeyboard(items) {
+  const rows = (items || []).slice(0, 8).map(item => [
+    textButton(`${item.index + 1}. ${item.title || 'Рецепт'}`, { a: 'open', i: item.index }, 'primary')
+  ]);
+  rows.push([
+    textButton('К книге', { a: 'favorites' }, 'secondary'),
+    textButton('Новый раздел', { a: 'newsection' }, 'positive')
+  ]);
+  return board(rows);
+}
+
+function putKeyboard(sections, index) {
+  const rows = (sections || []).slice(0, 8).map(section => [
+    textButton(section.title || 'Раздел', { a: 'put', s: section.id, i: index }, 'primary')
+  ]);
+  rows.push([
+    textButton('Новый раздел', { a: 'newsection' }, 'positive'),
+    textButton('К книге', { a: 'favorites' }, 'secondary')
+  ]);
+  return board(rows);
+}
+
+function bookBackKeyboard() {
+  return board([[
+    textButton('К книге', { a: 'favorites' }, 'secondary'),
+    textButton('Поиск рецептов', { a: 'search' }, 'secondary')
+  ]]);
+}
+
 function ideaKeyboard(ideas) {
   const rows = (ideas || []).slice(0, 5).map((item, index) => [
     textButton(`${index + 1}. ${item.title}`, { a: 'choose', i: index }, 'primary')
@@ -256,6 +299,10 @@ module.exports = {
   stepsKeyboard,
   catalogKeyboard,
   favoritesKeyboard,
+  bookKeyboard,
+  bookListKeyboard,
+  putKeyboard,
+  bookBackKeyboard,
   ideaKeyboard,
   backKeyboard,
   searchKeyboard

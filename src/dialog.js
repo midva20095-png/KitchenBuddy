@@ -10,7 +10,10 @@ const {
   minutesKeyboard,
   dietKeyboard,
   stepsKeyboard,
-  favoritesKeyboard,
+  bookKeyboard,
+  bookListKeyboard,
+  putKeyboard,
+  bookBackKeyboard,
   ideaKeyboard,
   backKeyboard,
   searchKeyboard
@@ -91,6 +94,8 @@ function blankUser(id) {
     stepIndex: 0,
     favorites: [],
     favSeq: 0,
+    book: [],
+    bookSeq: 0,
     history: [],
     usageDay: '',
     usageCount: 0,
@@ -127,15 +132,16 @@ function bumpUsage(user, now, kind) {
 }
 
 function welcomeText() {
-  return 'Здравствуйте. Я Кухонный Помощник. Нажмите «Поиск рецептов» и напишите, что приготовить. Готовый рецепт можно положить в «Сохранённые».';
+  return 'Здравствуйте. Я Кухонный Помощник. Нажмите «Поиск рецептов» и напишите, что приготовить. Готовый рецепт можно положить в «Моя кулинарная книга».';
 }
 
 function helpText() {
   return [
     'Справка.',
     '«Поиск рецептов»: напишите как есть, например «сырники на два человека», «рецепт для диабетика», «курица и рис».',
-    '«Сохранить» кладёт открытый рецепт в «Сохранённые».',
-    'В сохранённых: «открой 1», «удали 2».',
+    '«Сохранить» кладёт рецепт в «Моя кулинарная книга».',
+    'В книге рецепты лежат по разделам. «Новый раздел» заводит свой, например «Завтраки».',
+    '«открой 1» открывает рецепт, «удали 2» убирает его.',
     'Фото не разбираю.'
   ].join('\n');
 }
@@ -161,13 +167,14 @@ function actionOf(text, payload) {
   if (!value) return '';
   if (['начать', 'start', '/start', 'меню', 'в меню', 'назад', 'отмена', 'стоп', 'хватит', 'готово'].includes(value)) return 'menu';
   if (['помощь', 'справка', 'help', '/help'].includes(value)) return 'help';
-  if (['избранное', 'избранные', 'сохраненные', 'сохраненное'].includes(value)) return 'favorites';
+  if (['избранное', 'избранные', 'сохраненные', 'сохраненное', 'моя кулинарная книга', 'кулинарная книга', 'моя книга'].includes(value)) return 'favorites';
   if (['покупки', 'список покупок', 'что купить', 'список'].includes(value)) return 'shop';
   if (['по шагам', 'шаги', 'шаг', 'сначала', 'с начала', 'готовить по шагам'].includes(value)) return 'steps';
   if (['дальше', 'далее', 'следующий', 'следующий шаг'].includes(value)) return 'next';
   if (['сохрани в базу', 'в базу'].includes(value)) return 'keep';
   if (['моя база', 'база'].includes(value)) return 'base';
-  if (['сохрани', 'сохранить', 'в избранное', 'избранное сохранить'].includes(value)) return 'save';
+  if (['сохрани', 'сохранить', 'в избранное', 'избранное сохранить', 'в книгу'].includes(value)) return 'save';
+  if (['новый раздел'].includes(value)) return 'newsection';
   if (['еще вариант', 'другой вариант', 'другой рецепт'].includes(value)) return 'another';
   if (['поделиться', 'на стену'].includes(value)) return value === 'на стену' ? 'wall' : 'share';
   if (['мой рецепт', 'свой рецепт'].includes(value)) return 'myrecipe';
@@ -325,20 +332,135 @@ function noRecipe(user) {
   };
 }
 
+function sectionsOf(user) {
+  if (!Array.isArray(user.book)) user.book = [];
+  return user.book;
+}
+
+function looseCount(user) {
+  return user.favorites.filter(item => !item.section).length;
+}
+
+function sectionTitle(text) {
+  const value = String(text || '').replace(/[«»"]/g, '').replace(/\s+/g, ' ').trim();
+  const plain = normalize(value);
+  if (plain.length < 2 || plain.length > 24) return '';
+  return value.slice(0, 24);
+}
+
+function addSection(user, title) {
+  const book = sectionsOf(user);
+  const same = book.find(item => normalize(item.title) === normalize(title));
+  if (same) return { section: same, created: false };
+  if (book.length >= 8) return { error: 'full' };
+  user.bookSeq = (user.bookSeq || 0) + 1;
+  const section = { id: `b${user.bookSeq}`, title };
+  book.push(section);
+  return { section, created: true };
+}
+
 function showFavorites(user) {
-  user.mode = 'menu';
+  user.mode = 'book';
   user.draft = {};
-  if (!user.favorites.length) {
-    return { user, messages: [say('Сохранённых рецептов пока нет. После рецепта нажмите «Сохранить».', menuKeyboard())], job: null };
+  const sections = sectionsOf(user);
+  const loose = looseCount(user);
+  if (!user.favorites.length && !sections.length) {
+    return {
+      user,
+      messages: [say('Кулинарная книга пока пустая. После рецепта нажмите «Сохранить» и положите его в раздел.', menuKeyboard())],
+      job: null
+    };
   }
-  const lines = user.favorites.map((item, index) => `${index + 1}. ${item.title}`);
-  const text = `Сохранённые:\n${lines.join('\n')}\n\nОткройте кнопкой или напишите «открой 1». «удали 2» убирает рецепт.`;
-  return { user, messages: [say(text, favoritesKeyboard(user.favorites))], job: null };
+  const lines = sections.map(section => {
+    const count = user.favorites.filter(item => item.section === section.id).length;
+    return `${section.title} — ${count}`;
+  });
+  if (loose) {
+    lines.push('Без раздела:');
+    user.favorites.forEach((item, index) => {
+      if (!item.section) lines.push(`${index + 1}. ${item.title}`);
+    });
+  }
+  const text = `Моя кулинарная книга:\n${lines.join('\n')}\n\nОткройте раздел кнопкой. «открой 1» показывает рецепт, «удали 2» убирает его.`;
+  return { user, messages: [say(text, bookKeyboard(sections, loose))], job: null };
+}
+
+function openBookSection(user, sectionId) {
+  const id = sectionId === '-' ? '' : String(sectionId || '');
+  sectionsOf(user);
+  const section = id ? user.book.find(item => item.id === id) : null;
+  if (id && !section) return showFavorites(user);
+  const items = user.favorites
+    .map((item, index) => ({ title: item.title, index, section: item.section || '' }))
+    .filter(item => item.section === id);
+  const name = section ? section.title : 'Без раздела';
+  user.mode = 'book';
+  user.draft = { section: id };
+  if (!items.length) {
+    return {
+      user,
+      messages: [say(`В разделе «${name}» пока пусто. Сохраните рецепт и положите его сюда.`, bookKeyboard(user.book, looseCount(user)))],
+      job: null
+    };
+  }
+  const lines = items.map(item => `${item.index + 1}. ${item.title}`);
+  const text = `${name}:\n${lines.join('\n')}\n\nНомер — во всей книге. «открой 1» открывает, «удали 2» убирает.`;
+  return { user, messages: [say(text, bookListKeyboard(items))], job: null };
+}
+
+function beginNewSection(user) {
+  const pending = user.draft && user.draft.pending;
+  user.mode = 'newsection';
+  user.draft = pending ? { pending } : {};
+  return {
+    user,
+    messages: [say('Напишите название раздела, например «Завтраки» или «Сладкое».', bookBackKeyboard())],
+    job: null
+  };
+}
+
+function fromNewSection(user, text) {
+  const title = sectionTitle(text);
+  if (!title) {
+    return { user, messages: [say('Название раздела короткое. Напишите, например, «Завтраки».', bookBackKeyboard())], job: null };
+  }
+  const added = addSection(user, title);
+  if (added.error) {
+    user.mode = 'book';
+    user.draft = {};
+    return {
+      user,
+      messages: [say('В книге уже 8 разделов. Выберите один из них.', bookKeyboard(user.book, looseCount(user)))],
+      job: null
+    };
+  }
+  const pending = user.draft && user.draft.pending;
+  user.mode = 'book';
+  user.draft = {};
+  const index = user.favorites.findIndex(item => item.id === pending);
+  if (index >= 0) user.favorites[index].section = added.section.id;
+  const view = openBookSection(user, added.section.id);
+  const note = index >= 0
+    ? `«${user.favorites[index].title}» теперь в разделе «${added.section.title}».`
+    : (added.created ? `Раздел «${added.section.title}» создан.` : `Раздел «${added.section.title}» уже есть.`);
+  view.messages[0].text = `${note}\n\n${view.messages[0].text}`;
+  return view;
+}
+
+function putFavorite(user, index, sectionId) {
+  sectionsOf(user);
+  const item = user.favorites[index];
+  const section = user.book.find(row => row.id === sectionId);
+  if (!item || !section) return showFavorites(user);
+  item.section = section.id;
+  const view = openBookSection(user, section.id);
+  view.messages[0].text = `«${item.title}» в разделе «${section.title}».\n\n${view.messages[0].text}`;
+  return view;
 }
 
 function openFavorite(user, index) {
   if (!Number.isInteger(index) || index < 0 || !user.favorites[index]) {
-    return { user, messages: [say('Такого номера в избранном нет.', favoritesKeyboard(user.favorites))], job: null };
+    return { user, messages: [say('Такого номера в книге нет.', bookKeyboard(sectionsOf(user), looseCount(user)))], job: null };
   }
   const item = user.favorites[index];
   user.lastRecipe = structuredClone(item.recipe);
@@ -349,15 +471,14 @@ function openFavorite(user, index) {
 
 function deleteFavorite(user, index) {
   if (!Number.isInteger(index) || !user.favorites[index]) {
-    return { user, messages: [say('Такого номера в избранном нет.', favoritesKeyboard(user.favorites))], job: null };
+    return { user, messages: [say('Такого номера в книге нет.', bookKeyboard(sectionsOf(user), looseCount(user)))], job: null };
   }
   const [gone] = user.favorites.splice(index, 1);
-  const keyboard = user.favorites.length ? favoritesKeyboard(user.favorites) : menuKeyboard();
-  return { user, messages: [say(`Убрала «${gone.title}» из избранного.`, keyboard)], job: null };
+  const keyboard = user.favorites.length || sectionsOf(user).length ? bookKeyboard(user.book, looseCount(user)) : menuKeyboard();
+  return { user, messages: [say(`Убрала «${gone.title}» из кулинарной книги.`, keyboard)], job: null };
 }
 
 function saveFavorite(user, now) {
-  user.mode = 'menu';
   if (!user.lastRecipe) return noRecipe(user);
   const title = user.lastRecipe.title || 'Рецепт';
   const existing = user.favorites.findIndex(item => normalize(item.title) === normalize(title));
@@ -366,12 +487,20 @@ function saveFavorite(user, now) {
     id: `f${user.favSeq}`,
     title,
     recipe: structuredClone(user.lastRecipe),
-    savedAt: now.toISOString()
+    savedAt: now.toISOString(),
+    section: existing >= 0 ? (user.favorites[existing].section || '') : ''
   };
   if (existing >= 0) user.favorites.splice(existing, 1, entry);
   else user.favorites.push(entry);
   if (user.favorites.length > 15) user.favorites.splice(0, user.favorites.length - 15);
-  return { user, messages: [say(`Сохранила «${title}». Открыть можно в «Сохранённые».`, recipeKeyboard(user.lastRecipe))], job: null };
+  const index = user.favorites.findIndex(row => row.id === entry.id);
+  user.mode = 'book';
+  user.draft = { pending: entry.id };
+  const place = entry.section && sectionsOf(user).find(item => item.id === entry.section);
+  const note = place
+    ? `«${title}» в кулинарной книге, раздел «${place.title}». Можно переложить.`
+    : `«${title}» в кулинарной книге. Выберите раздел или заведите новый.`;
+  return { user, messages: [say(note, putKeyboard(user.book, index))], job: null };
 }
 
 function showShop(user) {
@@ -772,6 +901,7 @@ function openHub(user, id) {
 }
 
 function routeFreeText(user, text) {
+  if (user.mode === 'newsection') return fromNewSection(user, text);
   const favorite = favoriteCommand(text);
   if (favorite) return favorite.op === 'delete' ? deleteFavorite(user, favorite.index) : openFavorite(user, favorite.index);
   if (user.mode === 'search') return fromSearch(user, text);
@@ -821,6 +951,7 @@ function routeFreeText(user, text) {
 function turn(user, input, ctx) {
   const source = user ? structuredClone(user) : blankUser((input && input.userId) || '0');
   if (!Array.isArray(source.favorites)) source.favorites = [];
+  if (!Array.isArray(source.book)) source.book = [];
   if (!Array.isArray(source.history)) source.history = [];
   if (!source.draft || typeof source.draft !== 'object') source.draft = {};
   const incoming = input || {};
@@ -868,6 +999,9 @@ function turn(user, input, ctx) {
     return { user: source, messages: [say(helpText(), menuKeyboard())], job: null };
   }
   if (action === 'favorites') return showFavorites(source);
+  if (action === 'newsection') return beginNewSection(source);
+  if (action === 'book') return openBookSection(source, String((payload && payload.s) || ''));
+  if (action === 'put') return putFavorite(source, Number(payload && payload.i), String((payload && payload.s) || ''));
   if (action === 'shop') return showShop(source);
   if (action === 'steps') return showStep(source, 0);
   if (action === 'next') return showStep(source, (source.stepIndex || 0) + (source.mode === 'steps' ? 1 : 0));

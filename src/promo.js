@@ -2,6 +2,7 @@
 
 const PROJECTS = [
   ['ЯгаГенератор', 'https://vk.ru/club236645486'],
+  ['НейроЯга', 'https://vk.ru/neuroyaga'],
   ['Баба Яга', 'https://vk.ru/babyagaland'],
   ['Точки и линии', 'https://vk.ru/tochki_linii']
 ];
@@ -33,7 +34,7 @@ function promoFooter(options) {
 function withPromo(text, options) {
   const body = String(text || '').trim();
   if (!body) return promoFooter(options);
-  if (body.includes('https://vk.ru/babyagaland')) return body;
+  if (body.includes('https://vk.ru/neuroyaga')) return body;
   const footer = promoFooter(options);
   const limit = options && options.compact ? 500 : 3500;
   const room = Math.max(40, limit - footer.length - 2);

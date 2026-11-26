@@ -9,7 +9,7 @@ test('подпись проектов короткая и не двоится', 
   const text = withPromo('Рецепт борща.');
   assert.match(text, /Рецепт борща/);
   assert.match(text, /ЯгаГенератор — https:\/\/vk\.ru\/club236645486/);
-  assert.doesNotMatch(text, /Нейро|нейросет|модель/);
+  assert.match(text, /НейроЯга — https:\/\/vk\.ru\/neuroyaga/);
   assert.match(text, /Баба Яга — https:\/\/vk\.ru\/babyagaland/);
   assert.match(text, /Точки и линии — https:\/\/vk\.ru\/tochki_linii/);
   assert.equal(withPromo(text), text);
@@ -31,7 +31,7 @@ test('подпись проектов короткая и не двоится', 
 
   const long = withPromo('а'.repeat(600), { compact: true });
   assert.ok(long.length <= 500);
-  assert.match(long, /ЯгаГенератор/);
+  assert.match(long, /НейроЯга/);
 });
 
 test('каталог второго сообщества советует только похожее', () => {

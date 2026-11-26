@@ -24,7 +24,7 @@ test('свободный текст становится рецептом, ут�
   const hello = turn(blankUser('1'), { text: 'Привет' }, ctx);
   assert.equal(hello.job, null);
   assert.match(hello.messages[0].text, /Поиск рецептов/);
-  assert.match(hello.messages[0].text, /Сохранённые/);
+  assert.match(hello.messages[0].text, /кулинарная книга/);
 
   const dish = turn(blankUser('1'), { text: 'борщ на 6' }, ctx);
   assert.equal(dish.job.kind, 'dish');
@@ -172,7 +172,7 @@ test('раздел кондитера собирает рецепт и допи�
   assert.match(done.messages[0].text, /мастер-класс/);
   assert.match(done.messages[0].text, /wall-1_9/);
   assert.match(done.messages[0].text, /ЯгаГенератор/);
-  assert.doesNotMatch(done.messages[0].text, /Нейро/);
+  assert.match(done.messages[0].text, /НейроЯга/);
   assert.match(done.messages[0].text, /Баба Яга/);
   assert.match(done.messages[0].text, /Точки и линии/);
   assert.doesNotMatch(done.user.history[1].content, /ЯгаГенератор/);
@@ -192,7 +192,7 @@ test('меню по разделам, справка и свой рецепт', 
 
   const help = turn(blankUser('1'), { text: 'Справка' }, ctx);
   assert.match(help.messages[0].text, /Поиск рецептов/);
-  assert.match(help.messages[0].text, /Сохранённые/);
+  assert.match(help.messages[0].text, /кулинарная книга/);
 
   const missing = turn(blankUser('1'), { payload: { a: 'share' } }, ctx);
   assert.equal(missing.share, undefined);
@@ -281,7 +281,7 @@ test('поиск без разделов принимает блюдо, тему
   assert.match(cooked.messages[0].text, /Сырники/);
   assert.match(labels(cooked.messages[0].keyboard).join(' '), /Сохранить/);
   assert.match(labels(menuKeyboard()).join(' '), /Поиск рецептов/);
-  assert.match(labels(menuKeyboard()).join(' '), /Сохранённые/);
+  assert.match(labels(menuKeyboard()).join(' '), /Моя кулинарная книга/);
 });
 
 test('пожелание вроде рецепта для диабетика доходит до модели', () => {
@@ -311,4 +311,33 @@ test('пожелание вроде рецепта для диабетика д�
 
   const named = turn(blankUser('1'), { text: 'борщ на 4' }, ctx);
   assert.equal(named.job.data.free, undefined);
+});
+
+test('кулинарная книга раскладывает рецепты по разделам', () => {
+  let user = blankUser('1');
+  user.lastRecipe = { title: 'Сырники', ingredients: ['творог'], steps: ['Обжарьте'] };
+  const saved = turn(user, { text: 'сохрани' }, ctx);
+  assert.equal(saved.user.favorites.length, 1);
+  assert.equal(saved.user.favorites[0].section, '');
+  assert.match(saved.messages[0].text, /кулинарной книге/);
+  assert.match(labels(saved.messages[0].keyboard).join(' '), /Новый раздел/);
+
+  const naming = turn(saved.user, { payload: { a: 'newsection' } }, ctx);
+  assert.equal(naming.user.mode, 'newsection');
+  const made = turn(naming.user, { text: 'Завтраки' }, ctx);
+  assert.equal(made.user.book[0].title, 'Завтраки');
+  assert.equal(made.user.favorites[0].section, made.user.book[0].id);
+  assert.match(made.messages[0].text, /Сырники/);
+
+  const book = turn(made.user, { text: 'моя кулинарная книга' }, ctx);
+  assert.match(book.messages[0].text, /Завтраки — 1/);
+  const shelf = turn(book.user, { payload: { a: 'book', s: made.user.book[0].id } }, ctx);
+  assert.match(shelf.messages[0].text, /Сырники/);
+
+  book.user.lastRecipe = { title: 'Омлет', ingredients: ['яйцо'], steps: ['Жарьте'] };
+  const second = turn(book.user, { text: 'сохрани' }, ctx);
+  assert.equal(second.user.favorites[1].section, '');
+  const moved = turn(second.user, { payload: { a: 'put', i: 1, s: made.user.book[0].id } }, ctx);
+  assert.equal(moved.user.favorites[1].section, made.user.book[0].id);
+  assert.match(moved.messages[0].text, /Омлет/);
 });
